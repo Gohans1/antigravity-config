@@ -1,3 +1,3 @@
 setup hết toàn bộ vào antigravity máy này cho t, cài cả: exa cli, codegraph mcp, agent browser, (make sure path chuẩn, fresh session antigravity gọi clean)
 tất cả skill dc nhắc tới trong gemini.md cũng phải cài hết vào
-setup cài cả gemini.md
+setup cài cả gemini.md. fix languageserver limit theo những file tương ứng ở wsl/. dev dùng antigravity ở môi trường nào thì cài ở môi trường đó (ko force wsl). cần gì thì cứ hỏi và yêu cầu dev nếu cần

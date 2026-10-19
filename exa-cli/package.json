@@ -1,0 +1,20 @@
+{
+  "name": "exa-cli",
+  "version": "0.1.0",
+  "description": "Standalone Exa CLI with multi-key failover routing",
+  "type": "module",
+  "bin": {
+    "exa": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "defuddle": "^0.19.5",
+    "linkedom": "^0.18.13"
+  }
+}

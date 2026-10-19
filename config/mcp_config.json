@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--browserUrl=http://127.0.0.1:9222"
+      ],
+      "disabled": true
+    },
+    "codegraph": {
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    },
+    "tldraw": {
+      "command": "bun",
+      "args": [
+        "x",
+        "mcp-remote",
+        "https://tldraw-mcp-app.tldraw.workers.dev/mcp"
+      ]
+    }
+  }
+}

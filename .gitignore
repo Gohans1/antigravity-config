@@ -1,0 +1,17 @@
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.tmp
+
+# Local machine workspace data
+config/projects/
+config/sidecars/
+config/.migrated
+.codegraph/
+**/.codegraph/
+
+# Machine-specific MCP & Exa overrides (absolute paths, API keys). Never commit.
+config/mcp_config.local.json
+exa-cli/config.json
+node_modules/
+**/node_modules/

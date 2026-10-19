@@ -1,0 +1,14 @@
+﻿# OS and editor files
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+.vscode/
+.idea/
+
+# Environment and sensitive keys
+.env
+.env.*
+*.pem
+*.key
+*.token

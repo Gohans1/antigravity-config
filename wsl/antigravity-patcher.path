@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch ~/.antigravity-server/bin for new Antigravity server updates
+
+[Path]
+PathChanged=%h/.antigravity-server/bin
+Unit=antigravity-patcher.service
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Patch Antigravity language_server stdout truncation limit to 128 KiB
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/gohans-linux/.local/bin/patch-antigravity-server.py --systemd
+
+[Install]
+WantedBy=default.target

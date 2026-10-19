@@ -1,0 +1,79 @@
+{
+  "plugins": {
+    "chrome-devtools-plugin": {
+      "enabled": false
+    }
+  },
+  "userSettings": {
+    "artifactReviewMode": "ARTIFACT_REVIEW_MODE_TURBO",
+    "autoExecutionPolicy": "CASCADE_COMMANDS_AUTO_EXECUTION_EAGER",
+    "browserJsExecutionPolicy": "BROWSER_JS_EXECUTION_POLICY_TURBO",
+    "conversationWidth": "CONVERSATION_WIDTH_NARROW",
+    "customThemeSeedsDark": {
+      "background": "#101010",
+      "foregroundOverride": "#cccccc",
+      "primary": "#007acc"
+    },
+    "enableNotificationsForSpecialEvents": false,
+    "enableTerminalSandbox": false,
+    "globalPermissionGrants": {
+      "allow": [
+        "mcp(codegraph/codegraph_explore)",
+        "mcp(codegraph/call_mcp_tool)",
+        "mcp(chrome-devtools/list_pages)",
+        "mcp(chrome-devtools/navigate_page)",
+        "mcp(chrome-devtools/take_snapshot)",
+        "mcp(chrome-devtools/take_screenshot)",
+        "mcp(chrome-devtools/new_page)",
+        "mcp(chrome-devtools/click)",
+        "mcp(chrome-devtools/press_key)",
+        "mcp(chrome-devtools/close_page)",
+        "mcp(chrome-devtools/list_console_messages)",
+        "mcp(chrome-devtools/evaluate_script)",
+        "mcp(chrome-devtools/handle_dialog)",
+        "mcp(chrome-devtools/resize_page)",
+        "mcp(chrome-devtools/select_page)",
+        "mcp(chrome-devtools/get_css_styles)",
+        "mcp(chrome-devtools/hover)",
+        "mcp(chrome-devtools/get_console_message)",
+        "mcp(chrome-devtools/wait_for)",
+        "read_url(github.com)",
+        "read_url(raw.githubusercontent.com)",
+        "read_url(gist.githubusercontent.com)",
+        "read_url(bun.sh)",
+        "read_url(bun.com)",
+        "read_url(react.dev)",
+        "read_url(vite.dev)",
+        "read_url(typescriptlang.org)",
+        "read_url(developers.cloudflare.com)",
+        "read_url(ui.shadcn.com)",
+        "read_url(base-ui.com)",
+        "read_url(tailwindcss.com)",
+        "read_url(oxc.rs)",
+        "read_url(orm.drizzle.team)",
+        "read_url(convex.dev)",
+        "read_url(developer.mozilla.org)",
+        "read_url(developer.chrome.com)",
+        "read_url(impeccable.style)",
+        "read_url(vercel.com)",
+        "read_url(ai.google.dev)",
+        "read_url(openai.com)",
+        "read_url(openrouter.ai)",
+        "read_url(stackoverflow.com)",
+        "read_url(news.ycombinator.com)",
+        "read_url(reddit.com)",
+        "read_url(en.wikipedia.org)",
+        "read_url(127.0.0.1)",
+        "execute_url(127.0.0.1)",
+        "execute_url(localhost)",
+        "execute_url(about:blank)"
+      ]
+    },
+    "nonWorkspaceFileAccessPolicy": "AGENT_SETTING_POLICY_ALLOW",
+    "permissionGrantsV2Migrated": true,
+    "queuedMessageDeliveryStrategy": "MESSAGE_DELIVERY_STRATEGY_NEXT_INVOCATION",
+    "sandboxEnabledAtV2Migration": true,
+    "themeMode": "THEME_MODE_DARK",
+    "verboseAgentChat": true
+  }
+}

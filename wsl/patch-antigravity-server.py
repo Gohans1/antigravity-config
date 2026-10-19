@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 Idempotent binary + live-memory patcher for Antigravity language_server.
-- Raises command output limits (command.TruncateOutput 8 KiB, tooldecorators.truncateOutput 10 KB) to 128 KiB.
+- Raises command output limits (command.TruncateOutput 8 KiB) to 42 KiB (43,008 bytes).
+- Raises MCP output limit (McpToolHandler.Handle 10 KiB) to 128 KiB and outer step cap to 129 KiB.
 - Raises global rules / skills file & token limits (24 KB / 20k tokens) to 128 KiB / 128k tokens.
 - Raises view_file limits (MaxLinesPerView 800 -> 2,000 lines, MaxBytesPerView 45 KiB -> 68 KiB)
-  and DefaultSerializer.stepToMessage maxStepTokens (16,384 -> 44,032 tokens / 129 KiB).
+  and DefaultSerializer.stepToMessage maxStepTokens (16,384 -> 44,544 tokens / 129 KiB).
 """
 import glob
 import os
@@ -17,31 +18,31 @@ import sys
 # Exact byte patches: (name, original_bytes, patched_bytes, required)
 EXACT_PATCHES = [
     (
-        "command.TruncateOutput (8 KiB -> 128 KiB unconditional)",
+        "command.TruncateOutput (8 KiB -> 42 KiB unconditional)",
         bytes.fromhex("488b4308488b5b104885c9ba00200000480f44ca"),
-        bytes.fromhex("488b4308488b5b1031c990ba00000200480f44ca"),
+        bytes.fromhex("488b4308488b5b1031c990ba00a80000480f44ca"),
         True,
     ),
     (
-        "ideCommand.execute (8 KiB -> 128 KiB raw debug buffer)",
+        "ideCommand.execute (8 KiB -> 42 KiB raw debug buffer)",
         bytes.fromhex(
             "4881fa002000007e4748c786b8010000002000004829d74881c7002000004889bec00100004a8dbe00e0ffff"
         ),
         bytes.fromhex(
-            "4881fa000002007e4748c786b8010000000002004829d74881c7000002004889bec00100004a8dbe0000feff"
+            "4881fa00a800007e4748c786b801000000a800004829d74881c700a800004889bec00100004a8dbe0058ffff"
         ),
         False,
     ),
     (
-        "utils.terminalDetailsFromScopeItem (8 KiB -> 128 KiB)",
+        "utils.terminalDetailsFromScopeItem (8 KiB -> 42 KiB)",
         bytes.fromhex("488b02488b5a08b900200000488d7c2470be02000000"),
-        bytes.fromhex("488b02488b5a08b900000200488d7c2470be02000000"),
+        bytes.fromhex("488b02488b5a08b900a80000488d7c2470be02000000"),
         False,
     ),
     (
-        "serializers.terminalDetailsFromScopeItem (8 KiB -> 128 KiB)",
+        "serializers.terminalDetailsFromScopeItem (8 KiB -> 42 KiB)",
         bytes.fromhex("488b024889f3b900200000e8"),
-        bytes.fromhex("488b024889f3b900000200e8"),
+        bytes.fromhex("488b024889f3b900a80000e8"),
         False,
     ),
     (
@@ -186,8 +187,15 @@ TRUNCATE_OUTPUT_PATCHED_RE = re.compile(
 
 
 def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
+    orig_backup = bin_path + ".orig"
     with open(bin_path, "rb") as f:
-        data = bytearray(f.read())
+        current_data = bytearray(f.read())
+
+    if os.path.exists(orig_backup) and os.path.getsize(orig_backup) == len(current_data):
+        with open(orig_backup, "rb") as f:
+            data = bytearray(f.read())
+    else:
+        data = bytearray(current_data)
 
     applied_offsets: list[tuple[int, bytes, bytes]] = []
     modified = False
@@ -207,8 +215,11 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
             idx = data.find(orig)
             data[idx : idx + len(orig)] = patched
             applied_offsets.append((idx, orig, patched))
-            modified = True
-            print(f"  [patched] {name} @ 0x{idx:x}")
+            if current_data[idx : idx + len(patched)] == patched:
+                print(f"  [already-patched] {name} @ 0x{idx:x}")
+            else:
+                modified = True
+                print(f"  [patched] {name} @ 0x{idx:x}")
         elif required:
             print(
                 f"  [WARN] Required signature '{name}' count={c_orig} in {bin_path}",
@@ -233,8 +244,11 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
         patched_head = bytes.fromhex("b9000402000f1f00")
         data[idx : idx + 8] = patched_head
         applied_offsets.append((idx, orig_head, patched_head))
-        modified = True
-        print(f"  [patched] {td_name} @ 0x{idx:x}")
+        if current_data[idx : idx + 8] == patched_head:
+            print(f"  [already-patched] {td_name} @ 0x{idx:x}")
+        else:
+            modified = True
+            print(f"  [patched] {td_name} @ 0x{idx:x}")
     else:
         print(
             f"  [WARN] Required signature '{td_name}' orig={len(m_orig)} patched={len(m_patched)} in {bin_path}",
@@ -242,9 +256,10 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
         )
 
     if modified:
-        orig_backup = bin_path + ".orig"
         if not os.path.exists(orig_backup):
-            shutil.copy2(bin_path, orig_backup)
+            with open(orig_backup, "wb") as f:
+                f.write(current_data)
+            shutil.copymode(bin_path, orig_backup)
             print(f"  [backup] Saved original binary to {orig_backup}")
 
         tmp_path = bin_path + ".tmp"

@@ -121,7 +121,7 @@ describe("exa search", () => {
     const exa = fakeExa(tenResults);
 
     const { code, out } = await run(
-      ["search", "durable objects alarms", "-n", "3", "-t", "auto", "--include-domains", "developers.cloudflare.com,github.com", "--exclude-domains", "medium.com"],
+      ["search", "durable objects alarms", "-n", "7", "-t", "auto", "--include-domains", "developers.cloudflare.com,github.com", "--exclude-domains", "medium.com"],
       ENV_KEYS,
       exa.fetchImpl,
     );
@@ -138,12 +138,12 @@ describe("exa search", () => {
     const sections = out.split("\n\n---\n\n");
     expect(sections).toHaveLength(10);
     expect(sections[0]).toBe("1. Doc 1\nURL: https://developers.cloudflare.com/1\nPublished: 2026-10-10\nPassage 1");
-    expect(sections[2]).toBe("3. Doc 3\nURL: https://developers.cloudflare.com/3\nPublished: 2026-10-10\nPassage 3");
-    expect(sections[3]).toBe("4. Doc 4\nURL: https://developers.cloudflare.com/4");
+    expect(sections[6]).toBe("7. Doc 7\nURL: https://developers.cloudflare.com/7\nPublished: 2026-10-10\nPassage 7");
+    expect(sections[7]).toBe("8. Doc 8\nURL: https://developers.cloudflare.com/8");
     expect(sections[9]).toBe("10. Doc 10\nURL: https://developers.cloudflare.com/10");
   });
 
-  test("accepts --num-results and --max-results as aliases for -n (1-10)", async () => {
+  test("accepts --num-results and --max-results as aliases for -n (5-10)", async () => {
     const tenResults = {
       results: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({
         title: `Doc ${n}`,
@@ -154,7 +154,7 @@ describe("exa search", () => {
 
     for (const flag of ["--num-results", "--max-results"]) {
       const exa = fakeExa(tenResults);
-      const { code, out, err } = await run(["search", "bun", flag, "2"], ENV_KEYS, exa.fetchImpl);
+      const { code, out, err } = await run(["search", "bun", flag, "6"], ENV_KEYS, exa.fetchImpl);
 
       expect(code).toBe(0);
       expect(err).toBe("");
@@ -167,8 +167,8 @@ describe("exa search", () => {
       });
       const sections = out.split("\n\n---\n\n");
       expect(sections).toHaveLength(10);
-      expect(sections[1]).toBe("2. Doc 2\nURL: https://bun.sh/2\nHighlight 2");
-      expect(sections[2]).toBe("3. Doc 3\nURL: https://bun.sh/3");
+      expect(sections[5]).toBe("6. Doc 6\nURL: https://bun.sh/6\nHighlight 6");
+      expect(sections[6]).toBe("7. Doc 7\nURL: https://bun.sh/7");
     }
   });
 
@@ -182,14 +182,14 @@ describe("exa search", () => {
     expect(exa.requests).toHaveLength(0);
   });
 
-  test("rejects a highlight count outside 1-10 for every alias", async () => {
+  test("rejects a highlight count outside 5-10 for every alias", async () => {
     const exa = fakeExa(HONO);
 
     for (const flag of ["-n", "--max-results", "--num-results"]) {
-      for (const n of ["0", "11", "101", "1.5", "abc"]) {
+      for (const n of ["0", "1", "4", "11", "101", "5.5", "abc"]) {
         const { code, err } = await run(["search", "bun", flag, n], ENV_KEYS, exa.fetchImpl);
         expect(code).toBe(1);
-        expect(err).toBe("-n must be an integer between 1 and 10");
+        expect(err).toBe("-n must be an integer between 5 and 10");
       }
     }
     expect(exa.requests).toHaveLength(0);
@@ -816,12 +816,12 @@ describe("exa help and commands", () => {
       expect(out).toStartWith("Usage: exa <command> [options]");
       expect(out).toContain("search <query>");
       expect(out).toContain(
-        "-n <1-10>                 How many results include highlights (default: 5; all 10 titles + URLs are always shown)",
+        "-n <5-10>                 How many results include highlights (default: 5; all 10 titles + URLs are always shown)",
       );
       expect(out).toContain("--include-domains <d1,d2>   --exclude-domains <d1,d2>");
       expect(out).toContain("fetch <url...>");
       expect(out).toContain(
-        "Defaults: type=fast (~0.5s), 10 results (first 5 with highlights, rest title + URL; use -n 1-10 to adjust highlights).\n",
+        "Defaults: type=fast (~0.5s), 10 results (first 5 with highlights, rest title + URL; use -n 5-10 to adjust highlights).\n",
       );
       expect(out).not.toContain("--type");
       expect(out).not.toContain(" -t");

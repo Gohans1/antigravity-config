@@ -125,7 +125,7 @@ describe("formatSearchSections", () => {
 
   test("lets caller override how many leading results include highlights while still listing every title and URL", () => {
     const body = JSON.stringify({
-      results: [1, 2, 3, 4, 5].map((n) => ({
+      results: [1, 2, 3, 4, 5, 6, 7].map((n) => ({
         title: `Title ${n}`,
         url: `https://example.com/${n}`,
         publishedDate: "2026-10-10T00:00:00.000Z",
@@ -133,14 +133,16 @@ describe("formatSearchSections", () => {
       })),
     });
 
-    const sections = formatSearchSections(body, "", 3);
+    const sections = formatSearchSections(body, "", 6);
 
     expect(sections).toEqual([
       "1. Title 1\nURL: https://example.com/1\nPublished: 2026-10-10\nHighlight 1",
       "2. Title 2\nURL: https://example.com/2\nPublished: 2026-10-10\nHighlight 2",
       "3. Title 3\nURL: https://example.com/3\nPublished: 2026-10-10\nHighlight 3",
-      "4. Title 4\nURL: https://example.com/4",
-      "5. Title 5\nURL: https://example.com/5",
+      "4. Title 4\nURL: https://example.com/4\nPublished: 2026-10-10\nHighlight 4",
+      "5. Title 5\nURL: https://example.com/5\nPublished: 2026-10-10\nHighlight 5",
+      "6. Title 6\nURL: https://example.com/6\nPublished: 2026-10-10\nHighlight 6",
+      "7. Title 7\nURL: https://example.com/7",
     ]);
   });
 

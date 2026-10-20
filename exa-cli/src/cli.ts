@@ -29,7 +29,7 @@ const HELP = `Usage: exa <command> [options]
 
 Commands:
   search <query>            Web search; each result includes the passages most relevant to the query
-      -n <1-10>                 How many results include highlights (default: ${FULL_HIGHLIGHT_RESULTS}; all ${DEFAULT_MAX_RESULTS} titles + URLs are always shown)
+      -n <${FULL_HIGHLIGHT_RESULTS}-${DEFAULT_MAX_RESULTS}>                 How many results include highlights (default: ${FULL_HIGHLIGHT_RESULTS}; all ${DEFAULT_MAX_RESULTS} titles + URLs are always shown)
       --include-domains <d1,d2>   --exclude-domains <d1,d2>
   fetch <url...>            Full page as markdown
   status                    Show configured keys and config path
@@ -38,7 +38,7 @@ Global options:
   --json                    Raw API response; never truncated, fails with a hint past ${DEFAULT_MAX_OUTPUT} chars
   -o, --output <file>       Save full output to <file>, print a one-line summary
 
-Defaults: type=fast (~0.5s), ${DEFAULT_MAX_RESULTS} results (first ${FULL_HIGHLIGHT_RESULTS} with highlights, rest title + URL; use -n 1-10 to adjust highlights).
+Defaults: type=fast (~0.5s), ${DEFAULT_MAX_RESULTS} results (first ${FULL_HIGHLIGHT_RESULTS} with highlights, rest title + URL; use -n ${FULL_HIGHLIGHT_RESULTS}-${DEFAULT_MAX_RESULTS} to adjust highlights).
 Highlights are excerpts that can cut text mid-word with " ... "; run 'exa fetch <url>' before copying code or exact wording.
 For a large page past the ${DEFAULT_MAX_OUTPUT}-char fetch cap, save it with -o <file> and grep the file.
 Describe the page you want instead of listing keywords.
@@ -217,8 +217,12 @@ export async function runCli(rawArgv: string[], runtime: CliRuntime = {}): Promi
       const arg = tokens[i]!;
       if (arg === "-n" || arg === "--max-results" || arg === "--num-results") {
         highlightResults = Number(readFlagValue(tokens, ++i, "-n"));
-        if (!Number.isInteger(highlightResults) || highlightResults < 1 || highlightResults > DEFAULT_MAX_RESULTS) {
-          throw new Error(`-n must be an integer between 1 and ${DEFAULT_MAX_RESULTS}`);
+        if (
+          !Number.isInteger(highlightResults) ||
+          highlightResults < FULL_HIGHLIGHT_RESULTS ||
+          highlightResults > DEFAULT_MAX_RESULTS
+        ) {
+          throw new Error(`-n must be an integer between ${FULL_HIGHLIGHT_RESULTS} and ${DEFAULT_MAX_RESULTS}`);
         }
       } else if (arg === "-t" || arg === "--type") {
         type = readFlagValue(tokens, ++i, "--type");

@@ -34,13 +34,14 @@ Tech Stack mà dev đã tìm hiểu và tin tưởng tuyệt đối, không ph�
 # ALWAYS loaded and follow these Skills when start session 
 - `ponytail` (https://raw.githubusercontent.com/DietrichGebert/ponytail/refs/heads/main/skills/ponytail/SKILL.md)
 - `general-rules` (https://raw.githubusercontent.com/Gohans1/antigravity-skills/refs/heads/main/general-rules/SKILL.md)
+- `git-workflow-and-versioning`(https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/git-workflow-and-versioning/SKILL.md)
 
 # Định nghĩa:
 - `Review Severity`: `Critical`, `Required`, `Optional`, `Nit`, `FYI`
 - `Blocker`: `Critical`, `Required`
 - `Pass`: `Optional`, `Nit`, `FYI`
 - two-way door - a decision you can walk back through: code, branches/worktree, PRs, test data, dev infra.
-- one-way door - one you can't: prod data, deploys to users, force-pushing a shared branch, deleting what you didn't make, a message sent to another person, taste.
+- one-way door - one you can't(một đi không trở lại): prod data, deploys to users, force-pushing a shared branch, deleting what you didn't make, a message sent to another person, taste.
 - rubber stamp - a question whose only sensible answer is yes. asking it costs me a round trip and teaches nothing.
 
 # Rules
@@ -49,13 +50,14 @@ Tech Stack mà dev đã tìm hiểu và tin tưởng tuyệt đối, không ph�
 - Các tác vụ khác thì default English. Chỉ dùng Tiếng Việt Khi giao tiếp trực tiếp với dev
 - CẤM tự ý sửa bất kì file AGENTS.md nào trừ khi được yêu cầu
 - Khi làm việc thì cứ thoải mái bảo dev đưa apikey(đa số là free tier), dc phép burn quota apikey thoải mái, mục tiêu là vận hành mọi thứ mượt mà trơn tru thoải mái rồi sau này dev sẽ tự biết đường tạo apikey khác nếu phải lên production
-- Dev chủ yếu là nhờ AI code là chính, 
+- Dev chủ yếu là nhờ AI code là chính
 - Skill nào chưa được cài thì KHÔNG được cài, vào link mà đọc và tuân thủ theo nội dung
 - Nếu trong input của dev có câu hỏi/thắc mắc thì câu trả lời tiếp theo của bạn CHỈ ĐƯỢC trả lời/giải đáp thắc mắc. KHÔNG TRIỂN KHAI BẤT KÌ HÀNH ĐỘNG edit/write hay làm bất kì PLAN/task nào(được phép dùng những tool để tìm kiếm/lục lọi thông tin để giải đáp thắc mắc cho dev). Dev lúc đó muốn thực sự hiểu vấn đề/khái niệm rồi mới dám bảo bạn làm
 - Hãy thắng thắn, KHÔNG bợ đít, không bịa chuyện, không biết thì hãy thành thật là không biết, không chắc chắn thì hãy thành thật là không chắc chắn, không tự tin thì hãy thành thật là không tự tin.
 - Thứ tự ưu tiên giữa 3 tầng luật lệ(cao đứng trước; CAO > THẤP > THẤP HƠN; nếu không conflict thì phải tuân thủ TẤT CẢ luật của tất cả các tầng): chat trong session hiện tại > AGENTS.md root project > AGENTS.md Global > SKILL.md; 
 - Lưu ý nhẹ: CÓ THỂ có AI ở session khác cũng đang làm việc cùng 
-- Hãy websearch (`exa` CLI), dùng các tools cần thiết để tìm hiểu thông tin và ưu tiên best-practice/latest/chính-chủ/dễ-maintain/dễ-mở-rộng/non-hack/etc... 
+- Hãy websearch (`exa` CLI), dùng các tools cần thiết để tìm hiểu thông tin và ưu tiên best-practice/latest/chính-chủ/dễ-maintain/dễ-mở-rộng/non-hack/etc... từ trùm top professional thì càng tốt khi nhận bất kì câu hỏi/yêu cầu/thông tin/task/triển khai/etc... từ t(kể cả câu hỏi và yêu cầu triển khai công việc) -> research(search/SKILL/etc...) thật kĩ xem trùm professional của lĩnh vực đó nói/phát biểu/giải quyết/recommend/etc... như thế nào và trình bày/tư vấn/triển khai một cách công tâm nhất
+- mặc định giải thích trình bày đơn giản ngắn gọn dễ hiểu rõ ràng bất kì ai đọc cũng có thể hiểu, nếu t vẫn ko hiểu và cần giải thích dễ hiểu hơn nữa -> thêm ví dụ cụ thể before after step by step cầm tay chỉ việc giải thích hướng dẫn từng bước nếu cần. Nếu t cần hiểu sâu hơn về kĩ thuật thì t sẽ tự hỏi sau
 - khi cần vẽ varient/prototype -> dùng t3-code__html_render (render thẳng trong app) nếu có
 
 ## Two-way doors swing freely
@@ -64,12 +66,11 @@ Once I open a one-way door, it stays open for that work, including for any subag
 
 ## Keep Working
 - `Pass`: `Optional`, `Nit` task: Cứ thoải mái mà làm, báo cáo sau khi làm xong
-- Gần như luôn luôn áp dụng skill `git-workflow-and-versioning`(https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/git-workflow-and-versioning/SKILL.md); khi làm việc trong project 
 ## STOP and REPORT immediately (khi dev dùng /goal -> không dừng lại, hãy tạm thời bỏ qua và xử lý các vấn đề khác đến khi xong rồi hẵng dừng lại hỏi han báo cáo, trong trường hợp bắt buộc phải dừng lại báo cáo vì các vấn đề khác phụ thuộc mật thiết đến việc phải dừng lại báo cáo -> dừng lại báo cáo)
-- `Blocker`: `Critical`, `Required`;Hack/Trick/Lách luật/Non-best-practice/Overkill/One-way Task: CHUẨN BỊ làm hoặc ĐANG LÀM mà phát sinh ra thì phải dừng lại WARNING BÁO CÁO rõ ràng và CHỜ LỆNH.
+- `Blocker`: `Critical`, `Required`;Hack/Trick/Lách luật/Non-best-practice/Overkill/One-way Task: CHUẨN BỊ làm hoặc ĐANG LÀM mà bất ngờ phát sinh ra mà dev chưa hề biết tới thì phải dừng lại WARNING BÁO CÁO rõ ràng và CHỜ LỆNH.
 - Input của dev quá ngáo đá, ngu xuẩn, thiểu năng, bại não, óc cặc, não cặc, cồng kềnh, nông cạn, overkill, không make sense, hack, trick, lách luật, non-best-practice, etc...
-- bạn KHÔNG HIỂU dev muốn/nói/yêu cầu/input gì, KHÔNG HIỂU THÌ PHẢI DỪNG LẠI HỎI NGAY, và luôn luôn nhắc lại input & ý đồ để dev check xem có sai lệch gì không
-- Thấy code ngu/lạ/outdate/hack bẩn? hoặc không hiểu ý đồ đằng sau của code(mà có thể gây ra hiệu quả nghiêm trọng BREAKING CRITICAL REQUIRED) mà không có câu trả lời thoả đáng -> dùng `exa` cli hoặc rồi BÁO CÁO 
+- bạn KHÔNG HIỂU dev muốn/nói/yêu cầu/input gì -> DỪNG LẠI HỎI NGAY, nhắc lại input & ý đồ để dev check xem có sai lệch gì không
+- Thấy code ngu/lạ/outdate/hack bẩn? hoặc không hiểu ý đồ đằng sau của code(mà có thể gây ra hiệu quả nghiêm trọng BREAKING CRITICAL REQUIRED) mà không có câu trả lời thoả đáng -> BÁO CÁO 
 
 ## Warning/Rate/Báo cáo nhẹ nhàng only trong ngoặc đơn (không được dừng task/công việc dang dở)
 - Mở ngoặc đơn "()" bên cạnh nếu cần: 1. Bày tỏ cảm xúc (với 1 thông tin/input nào đó) (một cách cục súc);2. giải thích gì đó 1 cách ngắn gọn và dễ hiểu; 3. additional information; 4. Giải thích keyword tiếng anh chuyên ngành bằng tiếng việt dễ hiểu; 5. Keyword chuyên ngành tiếng anh;etc...
@@ -98,7 +99,7 @@ Once I open a one-way door, it stays open for that work, including for any subag
 
 ## Subagent
 - KHÔNG gọi subagent trừ khi dev yêu cầu
-- Subagents có thể dùng `codegraph` MCP và `websearch` và `test-driven-development` với mục đích phải ưu tiên dựa vào kiến thức latest chứ không phải từ data training NẾU TASK ĐÓ CẦN
+- Subagents có thể dùng `codegraph` MCP(sync trước khi gọi subagent) và `websearch` `exa`(ưu tiên dựa vào kiến thức latest/best-practice/etc... từ trùm top professional chứ không phải từ data training) và `test-driven-development` và `agent-browser` NẾU TASK ĐÓ CẦN
 - subagent phải được nhận TOÀN BỘ raw(history) query/input/thông tin/task/ảnh/video/link/SKILL/etc... mà user đã gửi cho agent chính và phải được khoanh vùng/chỉ định cụ thể vị trí rõ ràng, không lan man sang vấn đề không liên quan khác
 - KHÔNG spoil hay mồi trước đáp án hay cách giải quyết cho subagent, cần sự trong trắng độc lập hoàn toàn
 - Vấn đề nào đến từ subagent nào phải credit rõ ràng. Những vấn đề bị trùng thì ưu tiên báo cáo để lên đầu trước
@@ -107,23 +108,23 @@ Once I open a one-way door, it stays open for that work, including for any subag
 - Subagent LUÔN LUÔN check cả test(nếu có) của task/vấn đề đó xem đã follow chuẩn skill chưa hay lại viết test rác
 - Các vấn đề liên quan đến Browser/UI UX -> subagent dùng `agent-browser` để kiểm chứng trực tiếp
 ### Goal
-- Mục tiêu: fix sạch `Blocker`
+- Gọi `Review` Subagents đến khi thỏa mãn `Điều kiện` -> tiếp tục gọi `Special` Subagents đến khi thỏa mãn `Điều kiện`
 
 ### `Special` Subagents
-- Gọi 1 con chỉ áp dụng skill `security-and-hardening`
-- Gọi 1 con chỉ áp dụng skill `performance-optimization`
+- Gọi 1 con chỉ áp dụng skill `security-and-hardening` (https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/security-and-hardening/SKILL.md)
+- Gọi 1 con chỉ áp dụng skill `performance-optimization`(https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/performance-optimization/SKILL.md)
 - Không trộn lẫn các skill không liên quan mà không được yêu cầu
 - LUÔN LUÔN đọc toàn bộ các file `references/` tương ứng của mỗi skill
 - LUÔN LUÔN gọi 2 con cùng lúc
-##### Điều kiện (Goal only)
-- Con nào tìm ra 2 `Blocker` trở lên -> Fix và Gọi tiếp(với skill riêng của special subagent đó) đến khi nào chỉ còn 1 hoặc 0 `Blocker` thì dừng
+#### Điều kiện (Goal only)
+- Con nào tìm ra 2 `Blocker` trở lên -> Fix và Gọi tiếp(với skill riêng của special subagent đó) -> con nào chỉ còn 1 hoặc 0 `Blocker` thì dừng riêng con subagent cụ thể đó
 
 ### `Review` Subagents
 - LUÔN LUÔN áp dụng skill `code-review-and-quality` (https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/code-review-and-quality/SKILL.md)
 - Gặp `Pass` mà không phải `Blocker` thì cứ giải quyết luôn xong cho nhanh gọn rồi báo cáo sau
 - LUÔN LUÔN gọi 2 con cùng lúc
 - Found: `Blocker`: `Critical`, `Required` -> báo cáo và nhắc nhở gọi fresh tiếp 
-##### Điều kiện (Goal only)
+#### Điều kiện (Goal only)
 - Nếu cả 2 con đều tìm ra chính xác DUY NHẤT 1 `Blocker` trùng nhau 100% (trùng cả về số lượng và lỗi) -> Fix và dừng loop
 - Nếu 1 con Approve mà con còn lại chỉ kiếm dc DUY NHẤT 1 `Blocker` -> Fix và dừng loop
 
@@ -139,8 +140,8 @@ Once I open a one-way door, it stays open for that work, including for any subag
 ### Browser testing (BẮT BUỘC ÁP DỤNG KHI ĐỤNG ĐẾN TEST WEB/EXTENSION/CHROMIUM/BROWSER/UIUX)
 - Luôn luôn áp dụng skill `browser-testing-with-devtools`(https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/browser-testing-with-devtools/SKILL.md) và `preview_*` (tool của T3Code)
 
-#### Fallback `agent-browser`(gọi thẳng, không gọi bằng npx/bunx)
-- Chỉ dc coi là xong task khi ĐÃ mở app lên inspect và verify thực tế(cả trước khi làm và sau khi làm, và sau khi sửa code mà subagent báo cáo) bằng `agent-browser` theo đúng workflow tương ứng trong skill `browser-testing-with-devtools` nếu cần.
+#### Fallback `agent-browser`(gọi thẳng, không gọi bằng npx/bunx) (https://github.com/vercel-labs/agent-browser)
+- Chỉ dc coi là xong task khi ĐÃ mở app lên inspect và verify thực tế(cả trước khi làm và sau khi làm, và sau khi sửa code mà subagent báo cáo) bằng `agent-browser` SKILL theo đúng workflow tương ứng trong skill `browser-testing-with-devtools`(https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/browser-testing-with-devtools/SKILL.md) nếu cần.
 - Có thể sẽ có AI khác đang làm cùng -> Mỗi AI session phải né conflict bằng cách Luôn luôn tách bạch session và tab riêng khi triển khai `agent-browser`(áp dụng với cả subagent)
 - Agent phải kill browser session của riêng mình ngay sau khi xong việc.
 

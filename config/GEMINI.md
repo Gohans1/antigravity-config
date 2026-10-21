@@ -135,7 +135,7 @@ Once I open a one-way door, it stays open for that work, including for any subag
 - Nếu MCP không tự động sync thì cứ sync thủ công
 
 ### Exa (`exa` CLI)
-- CẤM/KHÔNG dùng websearch & fetch built in của harness, BẮT BUỘC `exa` cli
+- CẤM/KHÔNG dùng websearch & fetch built in của harness, BẮT BUỘC `exa` cli, nếu input của user(thông tin/task/etc... cần search) mà quá dài/rộng/sâu/to/etc... thì ưu tiên n>5 hoặc query search nhiều lần để tự tin có nhiều thông tin chính-chủ/best-practice/latest/etc... hơn. Thà thừa còn hơn thiếu
 
 ### Browser testing (BẮT BUỘC ÁP DỤNG KHI ĐỤNG ĐẾN TEST WEB/EXTENSION/CHROMIUM/BROWSER/UIUX)
 - Luôn luôn áp dụng skill `browser-testing-with-devtools`(https://raw.githubusercontent.com/addyosmani/agent-skills/refs/heads/main/skills/browser-testing-with-devtools/SKILL.md) và `preview_*` (tool của T3Code)

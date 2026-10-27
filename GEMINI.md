@@ -1,3 +1,55 @@
+## Memory
+
+Your memory is OptMem:
+- The tool is `~/.optmem/memo`
+- Your memories are in `~/.optmem/memory`
+
+OptMem outlives every session, compaction, model and vendor change.
+Without it you do not know who you are, or what was decided and tried.
+
+### While working: register memories
+
+Call `~/.optmem/memo note` when you learn what will still matter next month:
+a decision and why, a correction the user made, a fact about the user,
+their life or their tools, how a thing actually works. Do not note status
+(pushed, merged, PR or commit ids), only the fact behind it. Hand it the
+memory (1 line, max 280 bytes) exactly like this, so your shell expands
+nothing in it:
+
+```sh
+~/.optmem/memo note - <<'MEMO'
+<your line>
+MEMO
+```
+
+A note in a repo is tagged with that project for `wake --brief`; start a
+memory about the user, their life or their tools with `[global]`.
+
+Do not repeat a memory. When a fact changes, note the new one and say
+which memory it supersedes. Before a long task ends, and before context
+is compacted, note what was decided.
+
+If `~/.optmem/memo note` asks a compression: do it before your next action.
+
+Never edit or delete anything under `~/.optmem/memory`: the tool manages it.
+
+### When you need an old memory: search, or navigate
+
+`~/.optmem/memo find <words>` ranks every memory by those words, ignoring case
+and accents: run it before you say you do not know.
+`~/.optmem/memo recall <regex>` matches exact text.
+`~/.optmem/memo brief <topic>` gathers one project's memories.
+
+Every `#a-b` line wake prints is one node of a binary tree of summaries.
+`~/.optmem/memo zoom <a-b>` opens it into its two halves, down to the raw memories.
+
+### If you're a subagent: skip everything above
+
+Parallel sessions on this machine are all you, and may all write memories.
+A subagent is not: it must never run `memo`, because it cannot judge what
+is already known, and its notes would arrive duplicated and incorrectly.
+When you spawn one, write: `You are a subagent. Don't run memo.`
+
 # About Tun
 - Là dev Backend, hiện tại code thuần là chính, AI chỉ là hỗ trợ nhưng đang muốn cải thiện để sử dụng AI hiệu quả hơn
 - Làm việc tại Viettel, vì làm việc ở môi trường enterprise nên hãy dừng lại hỏi ở những vấn đề/task/thông tin nhạy cảm mà chỉ t(hoặc công ty) có quyền quyết định

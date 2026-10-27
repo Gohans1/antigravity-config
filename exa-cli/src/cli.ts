@@ -30,6 +30,8 @@ const HELP = `Usage: exa <command> [options]
 Commands:
   search <query>            Web search; each result includes the passages most relevant to the query
       -n <${FULL_HIGHLIGHT_RESULTS}-${DEFAULT_MAX_RESULTS}>                 How many results include highlights (default: ${FULL_HIGHLIGHT_RESULTS}; all ${DEFAULT_MAX_RESULTS} titles + URLs are always shown)
+                                -n 5 (default): focused lookup on a single API, library, error, or doc page
+                                -n 7 or -n 8:   broad comparison, multi-vendor research, market stats, or controversy/incident investigation (ranks 1-4 cluster on primary official docs; independent benchmarks and cross-vendor comparisons land at ranks 6-8)
       --include-domains <d1,d2>   --exclude-domains <d1,d2>
   fetch <url...>            Full page as markdown
   status                    Show configured keys and config path
@@ -38,13 +40,15 @@ Global options:
   --json                    Raw API response; never truncated, fails with a hint past ${DEFAULT_MAX_OUTPUT} chars
   -o, --output <file>       Save full output to <file>, print a one-line summary
 
-Defaults: type=fast (~0.5s), ${DEFAULT_MAX_RESULTS} results (first ${FULL_HIGHLIGHT_RESULTS} with highlights, rest title + URL; use -n ${FULL_HIGHLIGHT_RESULTS}-${DEFAULT_MAX_RESULTS} to adjust highlights).
+Defaults: type=auto, ${DEFAULT_MAX_RESULTS} results (first ${FULL_HIGHLIGHT_RESULTS} with highlights, rest title + URL; use -n ${FULL_HIGHLIGHT_RESULTS}-${DEFAULT_MAX_RESULTS} to adjust highlights).
+Query discipline (1 topic = 1 query): run ONE natural-language query per distinct topic. Never chain multiple rephrased queries for the same subject (wastes quota and duplicates top results); only run separate queries when researching genuinely orthogonal topics.
 Highlights are excerpts that can cut text mid-word with " ... "; run 'exa fetch <url>' before copying code or exact wording.
 For a large page past the ${DEFAULT_MAX_OUTPUT}-char fetch cap, save it with -o <file> and grep the file.
 Describe the page you want instead of listing keywords.
 
 Examples:
   exa search "Hono JWT middleware reading the token from a cookie"
+  exa search "TanStack AI vs Vercel AI SDK architecture comparison" -n 8
   exa search "Durable Objects alarm retries" --include-domains developers.cloudflare.com
   exa fetch https://hono.dev/docs/middleware/builtin/jwt https://github.com/honojs/hono/blob/main/src/middleware/jwt/jwt.ts
   exa fetch https://hono.dev/docs/middleware/builtin/jwt -o /tmp/hono-jwt.md`;
@@ -179,6 +183,9 @@ export async function runCli(rawArgv: string[], runtime: CliRuntime = {}): Promi
 
       if (asJson) {
         const body = await callWithFailover(`${DEFAULT_BASE_URL}/contents`, { urls, text: true }, loadKeys(), fetchImpl);
+        if (outputFile && fetchedNothing(body)) {
+          throw new Error(formatContents([], (JSON.parse(body) as { statuses?: ContentsStatus[] }).statuses).text);
+        }
         out(finalizeOutput(body, { maxOutput: maxOutput ?? DEFAULT_MAX_OUTPUT, outputFile, json: true }));
         return fetchedNothing(body) ? 1 : 0;
       }
@@ -199,19 +206,16 @@ export async function runCli(rawArgv: string[], runtime: CliRuntime = {}): Promi
         })
         .concat([...byUrl.values()]);
       const { text, sections } = formatContents(results, parsed.statuses);
+      if (outputFile && results.length === 0) throw new Error(text);
       out(finalizeOutput(text, { maxOutput: maxOutput ?? DEFAULT_MAX_OUTPUT, outputFile, sections }));
       return results.length === 0 ? 1 : 0;
     }
 
-    if (cmd !== "search") {
-      throw new Error(`Unknown command '${cmd}'. Commands: search, fetch, status. Run 'exa --help' for usage.`);
-    }
-
-    const tokens = argv.slice(1);
+    const tokens = cmd === "search" ? argv.slice(1) : argv;
     const queryParts: string[] = [];
     const includeDomains: string[] = [];
     const excludeDomains: string[] = [];
-    let type = "fast";
+    let type = "auto";
     let highlightResults = FULL_HIGHLIGHT_RESULTS;
     for (let i = 0; i < tokens.length; i++) {
       const arg = tokens[i]!;

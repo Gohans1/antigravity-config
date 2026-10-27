@@ -88,12 +88,76 @@ export async function callWithFailover(
 
 export const SEPARATOR = "\n\n---\n\n";
 
-const heading = (idx: number, item: { title?: string | null; url?: string }, chars?: number) => [
-  `${idx + 1}. ${item.title?.trim() || item.url || "Untitled"}`,
-  ...(item.url ? [`URL: ${item.url}${chars === undefined ? "" : ` (${chars} chars)`}`] : []),
-];
+const heading = (idx: number, item: { title?: string | null; url?: string }, chars?: number) => {
+  const title = typeof item.title === "string" ? item.title.trim() : "";
+  const url = typeof item.url === "string" ? item.url : "";
+  return [
+    `${idx + 1}. ${title || url || "Untitled"}`,
+    ...(url ? [`URL: ${url}${chars === undefined ? "" : ` (${chars} chars)`}`] : []),
+  ];
+};
 
 export const FULL_HIGHLIGHT_RESULTS = 5;
+
+const TRACKING_PARAMS = new Set([
+  "fbclid",
+  "gclid",
+  "dclid",
+  "msclkid",
+  "mc_cid",
+  "mc_eid",
+  "igshid",
+  "ref_src",
+  "ref_url",
+]);
+const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+function canonicalUrlKey(rawUrl?: string): string | undefined {
+  if (typeof rawUrl !== "string") return undefined;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return undefined;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return `raw:${trimmed}`;
+    const pathname = u.pathname;
+    let end = pathname.length;
+    while (end > 1 && pathname.charCodeAt(end - 1) === 47) end--;
+    const path = (end === pathname.length ? pathname : pathname.slice(0, end)) || "/";
+    const rawHost = u.hostname.toLowerCase();
+    if (rawHost === "youtu.be") {
+      const id = path.slice(1);
+      if (YT_ID_RE.test(id)) return `yt:${id}`;
+    } else if (/^(?:(?:www|m|music|gaming)\.)?youtube(?:-nocookie)?\.com$/.test(rawHost)) {
+      const id =
+        path === "/watch"
+          ? (u.searchParams.get("v") ?? "")
+          : (path.match(/^\/(?:shorts|embed|v|live)\/([^/]+)$/)?.[1] ?? "");
+      if (id !== "videoseries" && id !== "live_stream" && YT_ID_RE.test(id)) return `yt:${id}`;
+    } else if (/^(?:(?:www|mobile)\.)?(?:x|twitter)\.com$/.test(rawHost)) {
+      const statusId = path.match(/^\/(?:[^/]+|i\/web)\/(?:status|article)\/(\d+)(?:\/|$)/i)?.[1];
+      if (statusId) return `x:${statusId}`;
+    }
+
+    let host = rawHost.replace(/^www\./, "");
+    if (host === "twitter.com" || host === "mobile.twitter.com" || host === "mobile.x.com") host = "x.com";
+    const port = u.port ? `:${u.port}` : "";
+    const params = [...u.searchParams.entries()]
+      .filter(([k]) => {
+        const key = k.toLowerCase();
+        return !key.startsWith("utm_") && !TRACKING_PARAMS.has(key);
+      })
+      .sort(([ak, av], [bk, bv]) => (ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0));
+    const qs = new URLSearchParams(params).toString();
+    return `url:${host}${port}${path}${qs ? `?${qs}` : ""}${u.hash}`;
+  } catch {
+    return `raw:${trimmed}`;
+  }
+}
+
+const refLabel = (ref: { num: number; url?: string }) => {
+  const u = typeof ref.url === "string" ? ref.url.replace(/[\x00-\x1f\x7f-\x9f]+/g, "").trim() : "";
+  return u ? `#${ref.num} (${u})` : `#${ref.num}`;
+};
 
 // One string per result, so a size cap can cut between results instead of inside one.
 export function formatSearchSections(
@@ -101,27 +165,119 @@ export function formatSearchSections(
   emptyHint = "",
   highlightResults = FULL_HIGHLIGHT_RESULTS,
 ): string[] {
-  let parsed: { results?: SearchResultItem[] };
+  let parsed: unknown;
   try {
     parsed = JSON.parse(body);
   } catch {
     return [body];
   }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [body];
+  const rawResults = (parsed as { results?: unknown }).results;
+  if (rawResults != null && !Array.isArray(rawResults)) return [body];
 
-  const results = parsed.results ?? [];
+  const results = (rawResults ?? []).filter(
+    (r): r is SearchResultItem => Boolean(r) && typeof r === "object" && !Array.isArray(r),
+  );
   if (results.length === 0) return [emptyHint ? `No results found. ${emptyHint}` : "No results found."];
 
+  const seenUrls = new Map<string, { num: number; url?: string; reservedSlot: boolean; hasHighlights: boolean }>();
+  const seenHighlights = new Map<string, { num: number; url?: string; shown: boolean }>();
+  let slotsUsed = 0;
+
   return results.map((item, idx) => {
+    const num = idx + 1;
     const lines = heading(idx, item);
-    if (idx < highlightResults) {
-      if (item.publishedDate) lines.push(`Published: ${item.publishedDate.slice(0, 10)}`);
-      const highlights = (item.highlights ?? []).map((h) => h.trim()).filter(Boolean);
-      if (highlights.length) lines.push(highlights.join("\n...\n"));
+    const url = typeof item.url === "string" ? item.url : undefined;
+    const pub =
+      typeof item.publishedDate === "string" && item.publishedDate
+        ? `Published: ${item.publishedDate.slice(0, 10)}`
+        : "";
+    const highlights = (Array.isArray(item.highlights) ? item.highlights : [])
+      .filter((h): h is string => typeof h === "string")
+      .map((h) => h.trim())
+      .filter(Boolean);
+    const joined = highlights.join("\n...\n");
+    const norm = joined ? joined.replace(/\s+/g, " ") : "";
+    const urlKey = canonicalUrlKey(url);
+    const inBudget = slotsUsed < highlightResults;
+    const urlDup = urlKey ? seenUrls.get(urlKey) : undefined;
+    const contentDup = norm ? seenHighlights.get(norm) : undefined;
+
+    if (urlDup) {
+      if ((urlDup.reservedSlot || inBudget) && !urlDup.hasHighlights && highlights.length > 0) {
+        if (pub) lines.push(pub);
+        if (contentDup?.shown) {
+          if (urlDup.reservedSlot) {
+            slotsUsed--;
+            urlDup.reservedSlot = false;
+          }
+          lines.push(`[same URL as ${refLabel(urlDup)}; duplicate of ${refLabel(contentDup)}: identical highlights omitted]`);
+        } else {
+          if (!urlDup.reservedSlot) slotsUsed++;
+          urlDup.reservedSlot = false;
+          lines.push(`[same URL as ${refLabel(urlDup)}]`, joined);
+          seenHighlights.set(norm, { num, url, shown: true });
+        }
+        urlDup.num = num;
+        urlDup.url = url;
+        urlDup.hasHighlights = true;
+      } else {
+        if (inBudget && pub) lines.push(pub);
+        const omitted = inBudget && highlights.length > 0 ? "; highlights omitted" : "";
+        lines.push(`[duplicate of ${refLabel(urlDup)}: same URL${omitted}]`);
+      }
+      return lines.join("\n");
     }
+
+    if (contentDup && (contentDup.shown || !inBudget)) {
+      if (inBudget && pub) lines.push(pub);
+      lines.push(`[duplicate of ${refLabel(contentDup)}: identical highlights${inBudget ? " omitted" : ""}]`);
+      if (urlKey) seenUrls.set(urlKey, { num, url, reservedSlot: false, hasHighlights: contentDup.shown });
+      return lines.join("\n");
+    }
+
+    const shown = inBudget && highlights.length > 0;
+    if (inBudget) {
+      slotsUsed++;
+      if (pub) lines.push(pub);
+      if (highlights.length) lines.push(joined);
+    }
+    if (urlKey) seenUrls.set(urlKey, { num, url, reservedSlot: inBudget && !shown, hasHighlights: shown });
+    if (norm) seenHighlights.set(norm, { num, url, shown });
     return lines.join("\n");
   });
 }
 
+const MIN_HTML_CHARS = 200;
+const STRUCTURED_EXT_RE = /\.(?:ya?ml|json[lc]?|toml)$/i;
+const STRUCTURED_MIMES = new Set([
+  "application/json",
+  "text/json",
+  "application/jsonl",
+  "application/x-ndjson",
+  "application/ndjson",
+  "application/jsonlines",
+  "application/jsonc",
+  "application/yaml",
+  "application/x-yaml",
+  "text/yaml",
+  "text/x-yaml",
+  "text/vnd.yaml",
+  "application/toml",
+  "application/x-toml",
+  "text/toml",
+  "text/x-toml",
+]);
+const RAW_FALLBACK_MIMES = new Set(["", "text/plain", "application/octet-stream", "binary/octet-stream"]);
+const isStructuredMime = (mime: string) =>
+  STRUCTURED_MIMES.has(mime) || mime.endsWith("+json") || mime.endsWith("+yaml");
+const hasStructuredExt = (u: string) => {
+  try {
+    return STRUCTURED_EXT_RE.test(new URL(u).pathname);
+  } catch {
+    return false;
+  }
+};
 const PROSE_LANG_CLASSES = ["markdown", "md", "js", "c", "cs", "sh", "shell", "html", "xml", "markup", "atom"];
 const CODE_LANG_RE = /(?:^|\s)(?:language-|lang-|highlight-source-|mw-highlight-lang-|highlight-|type-)([\w+-]+)/i;
 const normLang = (raw: string) => raw.toLowerCase().replace(/^python3$/, "python");
@@ -138,7 +294,7 @@ export async function fetchDirectMarkdown(
     const isXStatus = (u: string) => /^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/[^/]+\/(?:status|article)\/\d+/i.test(u);
     if (/(?:^|\.)(?:x|twitter)\.com$/i.test(reqHost) && !isXStatus(url)) return undefined;
 
-    const headers: Record<string, string> = { Accept: "text/markdown, text/html;q=0.9" };
+    const headers: Record<string, string> = { Accept: "text/markdown, text/html;q=0.9, */*;q=0.8" };
     if (isGitHub) headers["User-Agent"] = "Mozilla/5.0 (compatible; Defuddle/1.0; +https://defuddle.md) bot";
 
     const res = await fetchImpl(url, { headers });
@@ -147,10 +303,26 @@ export async function fetchDirectMarkdown(
     const isX = isXStatus(finalUrl);
     if (/(?:^|\.)(?:x|twitter)\.com$/i.test(new URL(finalUrl).hostname) && !isX) return undefined;
 
-    const ct = res.headers.get("content-type") ?? "";
-    const body = await res.text();
+    const mime = (res.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+    const structured =
+      isStructuredMime(mime) ||
+      (RAW_FALLBACK_MIMES.has(mime) && (hasStructuredExt(finalUrl) || hasStructuredExt(url)));
+    const directText = mime === "text/markdown" || mime === "text/plain";
+    const isHtml = mime === "text/html" || mime === "application/xhtml+xml";
+    if (!structured && !directText && !isHtml && !isX) {
+      res.body?.cancel().catch(() => {});
+      return undefined;
+    }
 
-    if (/^text\/(markdown|plain)\b/i.test(ct) && !/^\s*<(?:!doctype\s+html|html)\b/i.test(body)) {
+    const body = await res.text();
+    const notHtmlOrBinary = !/^\s*<(?:!doctype\s+html|html)\b/i.test(body) && !body.includes("\0");
+
+    if (structured && notHtmlOrBinary) {
+      const text = body.trim();
+      return text ? { url, title: url, text } : undefined;
+    }
+
+    if (directText && notHtmlOrBinary) {
       const text = body.trim().replace(/^(`{3,}[\w-]+)\{[^}\n]+\}/gm, "$1");
       if (!text) return undefined;
       const fm = text.match(/^---\r?\n(?:[\s\S]*?\r?\n)?title:\s*["']?(.+?)["']?\r?\n[\s\S]*?---/);
@@ -158,7 +330,7 @@ export async function fetchDirectMarkdown(
       return { url, title: (fm?.[1] ?? h1?.[1])?.trim() || url, text };
     }
 
-    if (!/(?:text\/html|application\/xhtml\+xml)\b/i.test(ct) && !isX) return undefined;
+    if (!isHtml && !isX) return undefined;
 
     if (isGitHub && /\/blob\//i.test(finalUrl)) {
       for (const m of body.matchAll(/<script[^>]*data-target="react-app\.embeddedData"[^>]*>([\s\S]*?)<\/script>/gi)) {
@@ -269,6 +441,7 @@ export async function fetchDirectMarkdown(
       ?.replace(/\uE000([\s\S]*?)\uE001/g, (_, c: string) => `\`${c.replace(/\\([<>[\]*_`~\\])/g, "$1")}\``)
       .trim();
     if (!text || text.startsWith("Partial conversion completed with errors.")) return undefined;
+    if (!isX && text.length < MIN_HTML_CHARS) return undefined;
     return { url, title: parsed.title?.trim() || url, text };
   } catch {
     return undefined;

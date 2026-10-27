@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../src/cli";
@@ -80,7 +80,7 @@ describe("exa status", () => {
 });
 
 describe("exa search", () => {
-  test("sends ten fast search results with bare highlights and fails over when credits run out", async () => {
+  test("sends ten auto search results with bare highlights and fails over when credits run out", async () => {
     await withConfig(
       [
         { label: "empty", value: KEY_1 },
@@ -97,7 +97,7 @@ describe("exa search", () => {
           key: KEY_2,
           body: {
             query: "hono jwt middleware",
-            type: "fast",
+            type: "auto",
             numResults: 10,
             contents: { highlights: true },
           },
@@ -121,7 +121,7 @@ describe("exa search", () => {
     const exa = fakeExa(tenResults);
 
     const { code, out } = await run(
-      ["search", "durable objects alarms", "-n", "7", "-t", "auto", "--include-domains", "developers.cloudflare.com,github.com", "--exclude-domains", "medium.com"],
+      ["search", "durable objects alarms", "-n", "7", "-t", "fast", "--include-domains", "developers.cloudflare.com,github.com", "--exclude-domains", "medium.com"],
       ENV_KEYS,
       exa.fetchImpl,
     );
@@ -129,7 +129,7 @@ describe("exa search", () => {
     expect(code).toBe(0);
     expect(exa.requests[0]!.body).toEqual({
       query: "durable objects alarms",
-      type: "auto",
+      type: "fast",
       numResults: 10,
       contents: { highlights: true },
       includeDomains: ["developers.cloudflare.com", "github.com"],
@@ -161,7 +161,7 @@ describe("exa search", () => {
       expect(exa.requests).toHaveLength(1);
       expect(exa.requests[0]!.body).toEqual({
         query: "bun",
-        type: "fast",
+        type: "auto",
         numResults: 10,
         contents: { highlights: true },
       });
@@ -253,6 +253,35 @@ test("adds a note pointing to exa fetch when an excerpt elides text", async () =
 
     expect(JSON.parse(out)).toEqual(HONO);
   });
+
+  test("reports duplicate search results without repeating their highlights while keeping --json untouched", async () => {
+    const payload = {
+      results: [
+        { title: "Video", url: "https://youtu.be/9t2fV52jMA8", highlights: ["Full video transcript."] },
+        { title: "Video Watch", url: "https://www.youtube.com/watch?v=9t2fV52jMA8", highlights: ["Full video transcript."] },
+        { title: "Article DE", url: "https://micdoodle8.com/de/post", highlights: ["Monte Carlo seed -535646876083114041."] },
+        { title: "Article ES", url: "https://micdoodle8.com/es/post", highlights: ["Monte Carlo seed -535646876083114041."] },
+        { title: "Doc 3", url: "https://example.com/3", highlights: ["Passage 3"] },
+        { title: "Doc 4", url: "https://example.com/4", highlights: ["Passage 4"] },
+        { title: "Doc 5", url: "https://example.com/5", highlights: ["Passage 5"] },
+      ],
+    };
+
+    const textRun = await run(["search", "minecraft simulation"], ENV_KEYS, fakeExa(payload).fetchImpl);
+    const jsonRun = await run(["search", "minecraft simulation", "--json"], ENV_KEYS, fakeExa(payload).fetchImpl);
+
+    expect(textRun.code).toBe(0);
+    expect(textRun.out.split("\n\n---\n\n")).toEqual([
+      "1. Video\nURL: https://youtu.be/9t2fV52jMA8\nFull video transcript.",
+      "2. Video Watch\nURL: https://www.youtube.com/watch?v=9t2fV52jMA8\n[duplicate of #1 (https://youtu.be/9t2fV52jMA8): same URL; highlights omitted]",
+      "3. Article DE\nURL: https://micdoodle8.com/de/post\nMonte Carlo seed -535646876083114041.",
+      "4. Article ES\nURL: https://micdoodle8.com/es/post\n[duplicate of #3 (https://micdoodle8.com/de/post): identical highlights omitted]",
+      "5. Doc 3\nURL: https://example.com/3\nPassage 3",
+      "6. Doc 4\nURL: https://example.com/4\nPassage 4",
+      "7. Doc 5\nURL: https://example.com/5\nPassage 5",
+    ]);
+    expect(JSON.parse(jsonRun.out)).toEqual(payload);
+  });
 });
 
 describe("exa fetch", () => {
@@ -319,6 +348,28 @@ describe("exa fetch", () => {
 
     expect(code).toBe(1);
     expect(out).toBe("No content fetched.\n\nFailed URLs:\n- https://intranet.local: SOURCE_NOT_AVAILABLE (403)");
+  });
+
+  test("reports failed URLs on stderr without writing the -o file when no page could be fetched", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "exa-empty-"));
+    try {
+      const exa = fakeExa({
+        results: [],
+        statuses: [{ id: "https://intranet.local", status: "error", error: { tag: "SOURCE_NOT_AVAILABLE", httpStatusCode: 403 } }],
+      });
+
+      for (const extra of [[], ["--json"]]) {
+        const file = join(dir, extra.length ? "out.json" : "out.md");
+        const { code, out, err } = await run(["fetch", "https://intranet.local", "-o", file, ...extra], ENV_KEYS, exa.fetchImpl);
+
+        expect(code).toBe(1);
+        expect(out).toBe("");
+        expect(err).toBe("No content fetched.\n\nFailed URLs:\n- https://intranet.local: SOURCE_NOT_AVAILABLE (403)");
+        expect(existsSync(file)).toBe(false);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("shows usage when no URL is given", async () => {
@@ -563,7 +614,7 @@ describe("exa fetch", () => {
       }
       if (url === "https://github.com/kepano/defuddle/issues/61") {
         return new Response(
-          `<!DOCTYPE html><html><head><title>Issue 61</title></head><body><main><article><h1>Issue 61</h1><p>Full SSR issue body.</p></article></main></body></html>`,
+          `<!DOCTYPE html><html><head><title>Issue 61</title></head><body><main><article><h1>Issue 61</h1><p>Full SSR issue body describing how Defuddle preserves generic type annotations, fenced code blocks, callouts, tables, and headings across server-rendered GitHub issue threads without losing inline syntax or escaping angle brackets.</p></article></main></body></html>`,
           { headers: { "content-type": "text/html; charset=utf-8" } },
         );
       }
@@ -588,7 +639,87 @@ describe("exa fetch", () => {
     expect(seen.find((s) => s.url.includes("github.com"))?.ua).toContain("Defuddle");
     expect(out).toContain("Shipping Defuddle CLI today.");
     expect(out).toContain("Second tweet.");
-    expect(out).toContain("Full SSR issue body.");
+    expect(out).toContain("Full SSR issue body");
+  });
+
+  test("fetches YAML, JSON, and TOML directly while falling back to Exa /contents when HTML extraction is under 200 chars", async () => {
+    const exa = fakeExa({
+      results: [
+        {
+          url: "https://motion-opus.vercel.app/",
+          title: "Motion Lab",
+          text: "Full Exa-crawled body for the client-rendered Motion Lab interactive study application.",
+        },
+      ],
+      statuses: [{ id: "https://motion-opus.vercel.app/", status: "success" }],
+    });
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      if (url === "https://opencode.ai/update/latest.yml") {
+        return new Response("version: 2.0.32\npath: opencode.exe\n", {
+          headers: { "content-type": "application/yaml; charset=utf-8" },
+        });
+      }
+      if (url === "https://api.example.com/config.json") {
+        return new Response('{"strict":true}', { headers: { "content-type": "application/json" } });
+      }
+      if (url === "https://cdn.example.com/Cargo.toml") {
+        return new Response('[package]\nname = "demo"', { headers: { "content-type": "application/toml" } });
+      }
+      if (url === "https://motion-opus.vercel.app/") {
+        return new Response(
+          "<!doctype html><html><head><title>Motion Lab</title></head><body><main><p>Motion Lab</p><p>0 of 9 floors done</p></main></body></html>",
+          { headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
+      return exa.fetchImpl(url, init);
+    };
+
+    const { code, out, err } = await run(
+      [
+        "fetch",
+        "https://opencode.ai/update/latest.yml",
+        "https://api.example.com/config.json",
+        "https://cdn.example.com/Cargo.toml",
+        "https://motion-opus.vercel.app/",
+      ],
+      ENV_KEYS,
+      fetchImpl,
+    );
+
+    expect(code).toBe(0);
+    expect(err).toBe("");
+    expect(exa.requests).toEqual([
+      {
+        url: "https://api.exa.ai/contents",
+        key: KEY_1,
+        body: { urls: ["https://motion-opus.vercel.app/"], text: true },
+      },
+    ]);
+    expect(out).toBe(
+      [
+        "1. https://opencode.ai/update/latest.yml",
+        "URL: https://opencode.ai/update/latest.yml (34 chars)",
+        "version: 2.0.32\npath: opencode.exe",
+        "",
+        "---",
+        "",
+        "2. https://api.example.com/config.json",
+        "URL: https://api.example.com/config.json (15 chars)",
+        '{"strict":true}',
+        "",
+        "---",
+        "",
+        "3. https://cdn.example.com/Cargo.toml",
+        "URL: https://cdn.example.com/Cargo.toml (23 chars)",
+        '[package]\nname = "demo"',
+        "",
+        "---",
+        "",
+        "4. Motion Lab",
+        "URL: https://motion-opus.vercel.app/ (87 chars)",
+        "Full Exa-crawled body for the client-rendered Motion Lab interactive study application.",
+      ].join("\n"),
+    );
   });
 
   test("rejects options fetch does not support", async () => {
@@ -662,7 +793,11 @@ describe("exa output limits", () => {
   });
 
   test("fills the cap across results and lists the title and URL of both the cut result and any hidden results", async () => {
-    const results = [1, 2, 3, 4, 5].map((n) => ({ title: `R${n}`, url: `https://a.dev/${n}`, highlights: ["x".repeat(1000)] }));
+    const results = [1, 2, 3, 4, 5].map((n) => ({
+      title: `R${n}`,
+      url: `https://a.dev/${n}`,
+      highlights: [`${"x".repeat(999)}${n}`],
+    }));
 
     const { code, out } = await run(["search", "five pages", "--max-output", "2500"], ENV_KEYS, fakeExa({ results }).fetchImpl);
 
@@ -814,15 +949,19 @@ describe("exa help and commands", () => {
       const { code, out } = await run(argv, ENV_KEYS);
       expect(code).toBe(0);
       expect(out).toStartWith("Usage: exa <command> [options]");
-      expect(out).toContain("search <query>");
+      expect(out).not.toContain("exa <query>");
+      expect(out).toContain("search <query>            Web search; each result includes the passages most relevant to the query");
       expect(out).toContain(
         "-n <5-10>                 How many results include highlights (default: 5; all 10 titles + URLs are always shown)",
       );
+      expect(out).toContain("-n 5 (default):");
+      expect(out).toContain("-n 7 or -n 8:");
       expect(out).toContain("--include-domains <d1,d2>   --exclude-domains <d1,d2>");
       expect(out).toContain("fetch <url...>");
       expect(out).toContain(
-        "Defaults: type=fast (~0.5s), 10 results (first 5 with highlights, rest title + URL; use -n 5-10 to adjust highlights).\n",
+        "Defaults: type=auto, 10 results (first 5 with highlights, rest title + URL; use -n 5-10 to adjust highlights).\n",
       );
+      expect(out).toContain("1 topic = 1 query");
       expect(out).not.toContain("--type");
       expect(out).not.toContain(" -t");
       expect(out).not.toContain("--max-output");
@@ -857,10 +996,35 @@ describe("exa help and commands", () => {
     expect(out).toContain("--json                    Raw API response; never truncated, fails with a hint past 26000 chars");
   });
 
-  test("rejects unknown commands with the list of commands", async () => {
-    const { code, err } = await run(["hono jwt"], ENV_KEYS);
+  test("treats a bare query without 'search' as equivalent to 'exa search <query>'", async () => {
+    const tenResults = {
+      results: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({
+        title: `Doc ${n}`,
+        url: `https://hono.dev/${n}`,
+        highlights: [`Highlight ${n}`],
+      })),
+    };
+    const exa = fakeExa(tenResults);
 
-    expect(code).toBe(1);
-    expect(err).toBe("Unknown command 'hono jwt'. Commands: search, fetch, status. Run 'exa --help' for usage.");
+    const { code, out, err } = await run(["hono jwt", "-n", "7"], ENV_KEYS, exa.fetchImpl);
+
+    expect(code).toBe(0);
+    expect(err).toBe("");
+    expect(exa.requests).toEqual([
+      {
+        url: "https://api.exa.ai/search",
+        key: KEY_1,
+        body: {
+          query: "hono jwt",
+          type: "auto",
+          numResults: 10,
+          contents: { highlights: true },
+        },
+      },
+    ]);
+    const sections = out.split("\n\n---\n\n");
+    expect(sections).toHaveLength(10);
+    expect(sections[6]).toBe("7. Doc 7\nURL: https://hono.dev/7\nHighlight 7");
+    expect(sections[7]).toBe("8. Doc 8\nURL: https://hono.dev/8");
   });
 });

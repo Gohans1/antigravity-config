@@ -25,6 +25,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Regression tests
+        run: |
+          test_deps="$(mktemp -d)"
+          trap 'rm -rf "$test_deps"' EXIT
+          npm install --prefix "$test_deps" --no-audit --no-fund --ignore-scripts react@19.3.0 react-dom@19.3.0 typescript@5.9.3 esbuild@0.28.2
+          NODE_PATH="$test_deps/node_modules" node --test scripts/*.test.mjs
+
       - name: Dial indicator
         run: |
           node examples/dial-indicator/build.mjs
@@ -56,6 +63,11 @@ jobs:
         run: |
           node examples/raptor-engine/build.mjs
           node examples/raptor-engine/build.mjs --light
+
+      - name: Push button
+        run: |
+          node examples/push-button/build.mjs
+          node examples/push-button/build.mjs --light
 
       - name: Committed pages are unchanged
         run: |

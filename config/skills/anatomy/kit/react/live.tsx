@@ -22,13 +22,27 @@ export function useStillness() {
 
 export function useInView<T extends Element>(ref: React.RefObject<T | null>) {
   const [inView, setInView] = React.useState(false);
+  const watched = React.useRef<Element | null>(null);
+  const observer = React.useRef<IntersectionObserver | null>(null);
   React.useEffect(() => {
     const node = ref.current;
+    if (node === watched.current) return;
+    observer.current?.disconnect();
+    observer.current = null;
+    watched.current = node;
+    setInView(false);
     if (!node) return;
-    const observer = new IntersectionObserver((entries) => setInView(Boolean(entries.at(-1)?.isIntersecting)), { rootMargin: MARGIN });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [ref]);
+    const binding = new IntersectionObserver((entries) => {
+      if (watched.current === node && observer.current === binding) setInView(Boolean(entries.at(-1)?.isIntersecting));
+    }, { rootMargin: MARGIN });
+    observer.current = binding;
+    binding.observe(node);
+  });
+  React.useEffect(() => () => {
+    observer.current?.disconnect();
+    observer.current = null;
+    watched.current = null;
+  }, []);
   return inView;
 }
 
@@ -44,15 +58,9 @@ export function Stage({ className, children }: { className: string; children: Re
 
 export function useReadout<T extends Element>() {
   const anchor = React.useRef<T>(null);
-  const slot = React.useRef<Element | null>(null);
-  const said = React.useRef("");
-  React.useEffect(() => {
-    slot.current = anchor.current?.closest(".iso-plate")?.querySelector("[data-readout]") ?? null;
-  }, []);
   const say = React.useCallback((text: string) => {
-    if (text === said.current) return;
-    said.current = text;
-    if (slot.current) slot.current.textContent = text;
+    const slot = anchor.current?.closest(".iso-plate")?.querySelector("[data-readout]");
+    if (slot && slot.textContent !== text) slot.textContent = text;
   }, []);
   return { anchor, say };
 }

@@ -58,9 +58,11 @@ function signedArea(points) {
   return s / 2;
 }
 
-function convexOrThrow(points, name) {
+function convexOrThrow(ring, name) {
+  const points = ring.filter((p, i) => Math.hypot(p[0] - ring[(i + ring.length - 1) % ring.length][0], p[1] - ring[(i + ring.length - 1) % ring.length][1]) > 1e-9);
   const n = points.length;
   let sign = 0;
+  let turned = 0;
   for (let i = 0; i < n; i++) {
     const a = points[i];
     const b = points[(i + 1) % n];
@@ -69,12 +71,18 @@ function convexOrThrow(points, name) {
     if (Math.abs(cross) < 1e-9) continue;
     if (!sign) sign = Math.sign(cross);
     else if (Math.sign(cross) !== sign) throw new Error(`turning: part ${name} is not convex; split it into convex pieces`);
+    turned += Math.atan2(cross, (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1]));
   }
+  if (sign && Math.abs(Math.abs(turned) - TAU) > 1e-6) throw new Error(`turning: part ${name} is not convex; split it into convex pieces`);
 }
 
 export function roundedPolygon(polygon, radius = 0, steps = 4) {
-  const poly = signedArea(polygon) < 0 ? polygon.slice().reverse() : polygon.slice();
-  if (!(radius > 0)) return poly.map(([x, y]) => [x, y]);
+  const ordered = signedArea(polygon) < 0 ? polygon.slice().reverse() : polygon.slice();
+  if (!(radius > 0)) return ordered.map(([x, y]) => [x, y]);
+  const same = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1e-9;
+  const poly = ordered.filter((p, i) => i === 0 || !same(p, ordered[i - 1]));
+  while (poly.length > 1 && same(poly[0], poly[poly.length - 1])) poly.pop();
+  if (poly.length < 3) return poly.map(([x, y]) => [x, y]);
   const n = poly.length;
   const normals = poly.map((a, i) => {
     const b = poly[(i + 1) % n];
@@ -293,11 +301,18 @@ function thinCloud(points, most = 64) {
 
 export function turning(P, { recorder = null, scale = 1 } = {}) {
   const T = { P, R: recorder, scale, groups: [], layers: [], order: [], parts: [], built: null };
-  const groupOf = (g) => (g === undefined || g === null ? null : typeof g === "string" ? T.groups.find((x) => x.name === g) : g);
+  const groupOf = (g) => {
+    if (g === undefined || g === null) return null;
+    if (typeof g !== "string") return g;
+    const group = T.groups.find((x) => x.name === g);
+    if (!group) throw new Error(`turning: unknown group ${g}`);
+    return group;
+  };
   const layerOf = (l) => (typeof l === "string" ? T.layers.find((x) => x.name === l) : l);
   const origin = (group) => (group ? group.origin : [0, 0, 0]);
   const local = (group, p) => sub3(p, origin(group));
   T.group = (name, options = {}) => {
+    if (T.groups.some((group) => group.name === name)) throw new Error(`turning: duplicate group ${name}`);
     const parent = groupOf(options.parent);
     const po = origin(parent);
     let kind;
@@ -674,7 +689,7 @@ export function turning(P, { recorder = null, scale = 1 } = {}) {
     if (part.kind === "prism") {
       const { F, ring, s0, s1 } = part.world;
       const along = dot3(N, F.a);
-      const base = { name: part.name, group: part.group, layer: part.layer, tone: part.tone, crease: part.crease, lit: part.lit, material: part.material, details: { ...part.details }, bevel: part.spec.bevel };
+      const base = { name: part.name, owner: part.owner, group: part.group, layer: part.layer, tone: part.tone, crease: part.crease, lit: part.lit, material: part.material, details: { ...part.details }, bevel: part.spec.bevel };
       let halves;
       if (Math.abs(Math.abs(along) - 1) < 1e-6) {
         const sCut = (d - dot3(N, F.o)) / along;
@@ -713,8 +728,8 @@ export function turning(P, { recorder = null, scale = 1 } = {}) {
       drop(part);
       return made;
     }
-    if (part.kind === "round") {
-      const { F, s0, s1, r0, r1, ends } = part.world;
+    if (part.kind === "round" || (part.kind === "fixed" && part.round)) {
+      const { F, s0, s1, r0, r1, ends } = part.round ?? part.world;
       const along = dot3(N, F.a);
       if (Math.abs(Math.abs(along) - 1) > 1e-6) throw new Error(`turning: a round can only be split across its axis (${part.name})`);
       const sCut = (d - dot3(N, F.o)) / along;
@@ -722,7 +737,7 @@ export function turning(P, { recorder = null, scale = 1 } = {}) {
       const rAt = r0 + ((r1 - r0) * (sCut - s0)) / (s1 - s0);
       part.dead = true;
       if (T.R) T.R.solids.splice(T.R.solids.indexOf(part.shapes[0]), 1);
-      const base = { group: part.group, layer: part.layer, tone: part.tone, crease: part.crease, lit: part.lit, material: part.material, F, fixed: false };
+      const base = { owner: part.owner, group: part.group, layer: part.layer, tone: part.tone, crease: part.crease, lit: part.lit, material: part.material, F, fixed: false };
       const made = [
         T.round({ ...base, name: `${part.name}.a`, s0, s1: sCut, r: [r0, rAt], ends: [ends[0], "open"], details: part.details }),
         T.round({ ...base, name: `${part.name}.b`, s0: sCut, s1, r: [rAt, r1], ends: ["open", ends[1]] }),

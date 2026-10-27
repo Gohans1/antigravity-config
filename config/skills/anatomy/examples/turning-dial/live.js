@@ -236,6 +236,10 @@ function tick(now) {
   const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
   last = now;
   const calm = still.matches;
+  if (calm) {
+    touring = false;
+    clearTimeout(idle);
+  }
   if (touring) {
     target += SPEED * dt;
     clock += dt;

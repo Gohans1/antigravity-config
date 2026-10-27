@@ -90,10 +90,13 @@ for (const theta of angles) {
     const { F, ring, s0, s1 } = part.world;
     const up = run.up;
     const Pk = planted ? { ...Pp, azimuth: Pp.azimuth - 2 } : Pp;
-    const kit = up ? k.extrude(ring, s0, s1 - s0, Pk) : G.prismOf(F, ring, s0, s1, Pk);
-    const mine = subpaths(f.d[run.role.edge])[0].pts;
+    const pts = up ? ring.map(([x, y]) => G.add3(G.add3(F.o, G.mul3(F.a, F.a[2] < 0 ? s1 : s0)), G.add3(G.mul3(F.u, x), G.mul3(F.v, y)))) : null;
+    const kit = up ? k.extrude(pts.map(([x, y]) => [x, y]), pts[0][2], s1 - s0, Pk) : G.prismOf(F, ring, s0, s1, Pk);
+    const cut = Boolean(part.spec.cuts?.length);
+    const mine = subpaths(f.d[run.role[cut ? "fill" : "edge"]])[0].pts;
     const theirs = sh(subpaths(kit.fill)[0].pts);
-    const ho = hausdorff(mine, theirs);
+    const visible = cut ? oneWay(subpaths(f.d[run.role.edge]).flatMap((path) => path.pts), theirs) : 0;
+    const ho = Math.max(hausdorff(mine, theirs), visible);
     results.outline = Math.max(results.outline, ho);
     if (ho > (worstAt[part.name]?.outline ?? -1)) worstAt[part.name] = { ...(worstAt[part.name] ?? {}), outline: ho, at: theta };
     if (up) {
@@ -239,7 +242,7 @@ for (const theta of angles) {
       ends = ["flat", "flat"];
       profile = [[s0, r0], ...knots.slice(1, -1).map((sv) => [sv, curve.radius(sv), 1]), [s1, r1]];
     } else ({ F, s0, s1, r0, r1, ends, profile } = part.world);
-    const meridian = [[profile[0][0], 0], ...profile.filter((p) => p[1] > 1e-9), [profile[profile.length - 1][0], 0]];
+    const meridian = [...(ends[0] === "open" ? [] : [[profile[0][0], 0]]), ...profile.filter((p) => p[1] > 1e-9), ...(ends[1] === "open" ? [] : [[profile[profile.length - 1][0], 0]])];
     const domed = ends.includes("dome");
     const radius = (s) => {
       if (ends[0] === "dome" && s < s0) return Math.sqrt(Math.max(0, r0 * r0 - (s - s0) ** 2));
@@ -262,11 +265,13 @@ for (const theta of angles) {
     const kit = lathed ? G.lathe(meridian, F, Pp, { smooth: lathed }) : domed ? G.lathe(analytic, F, Pp, { smooth: { slope, radius } }) : G.lathe(meridian, F, Pp, { smooth: true });
     const kitFine = lathed ? G.lathe(meridian, F, Pf, { smooth: lathed }) : domed ? G.lathe(analytic, F, Pf, { smooth: { slope, radius } }) : G.lathe(meridian, F, Pf, { smooth: true });
     const sh = (pts) => pts.map(([x, y]) => [x + shift[0], y + shift[1]]);
-    const mine = subpaths(f.d[run.role.edge])[0];
+    const cut = Boolean(part.spec.cuts?.length);
+    const mine = subpaths(f.d[run.role[cut ? "fill" : "edge"]])[0];
     const theirs = sh(subpaths(kit.fill)[0]);
     const fineRef = subpaths(kitFine.fill)[0].map(([x, y]) => [x / 10 + shift[0], y / 10 + shift[1]]);
     const ho = hausdorff(mine, theirs);
-    const hf = hausdorff(mine, fineRef);
+    const visible = cut ? subpaths(f.d[run.role.edge]).flat().reduce((worst, point) => Math.max(worst, distToPoly(point, fineRef)), 0) : 0;
+    const hf = Math.max(hausdorff(mine, fineRef), visible);
     stats.outline = Math.max(stats.outline, ho);
     stats.outlineFine = Math.max(stats.outlineFine, hf);
     stats.parts++;
@@ -349,7 +354,9 @@ const subpaths = (d) => [...(d ?? "").matchAll(/M([^M]*)/g)].map(([, body]) => {
     let worst = 0;
     for (let i = 0; i < A.length; i++) {
       if (A[i].length === B[i].length) for (let j = 0; j < A[i].length; j++) worst = Math.max(worst, Math.abs(A[i][j][0] - B[i][j][0]), Math.abs(A[i][j][1] - B[i][j][1]));
-      else for (const p of A[i]) worst = Math.max(worst, Math.min(...B[i].slice(1).map((q, j) => segDist(p, B[i][j], q))));
+      else {
+        for (const [from, to] of [[A[i], B[i]], [B[i], A[i]]]) for (const p of from) worst = Math.max(worst, Math.min(...to.slice(1).map((q, j) => segDist(p, to[j], q))));
+      }
     }
     return { error: worst };
   };

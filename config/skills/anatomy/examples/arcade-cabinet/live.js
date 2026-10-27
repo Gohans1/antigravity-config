@@ -482,7 +482,7 @@ function tick(now) {
   for (const c of state.coins) {
     c.t += calm ? 10 : dt;
     const pose = coinPose(c);
-    if (!c.switched && pose.stage === "roll" && pose.p[1] < D.wire.from[1]) {
+    if (!c.switched && (calm || (pose.stage === "roll" && pose.p[1] < D.wire.from[1]))) {
       c.switched = true;
       state.meter++;
       el.meter.textContent = String(state.meter).padStart(6, "0");

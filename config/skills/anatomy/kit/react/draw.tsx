@@ -16,7 +16,7 @@ interface SolidProps {
 
 export function Solid({ paths, tone = "hi", crease = "faint", halo = false, lit = false, flat = false, className, inner, children }: SolidProps) {
   return (
-    <g className={className ? `iso-solid ${className}` : "iso-solid"} data-lit={lit ? "" : undefined}>
+    <g className={className ? `iso-solid ${className}` : "iso-solid"} data-lit={lit ? "" : undefined} data-seamless={paths.seamless ? "" : undefined}>
       {halo ? <path className="iso-halo" d={paths.fill} /> : null}
       <path className="iso-fill" d={paths.fill} />
       {flat ? null : paths.shades.map((d, shade) => (d ? <path key={shade} className="iso-shade" data-shade={shade} d={d} /> : null))}
@@ -79,15 +79,16 @@ export function Wire({ from, to, via = [], tone = "lo", dotted = false, dashed =
   );
 }
 
-export function Dots({ points, size = 0.5, tone = "mid", pulse = false }: { points: Flat[]; size?: number; tone?: Tone; pulse?: boolean }) {
+export function Dots({ points, size = 0.5, tone = "mid", pulse = false }: { points: Array<Flat | [number, number, number]>; size?: number; tone?: Tone; pulse?: boolean }) {
   return (
     <g className="iso-dots" data-tone={tone}>
-      {points.map(([x, y], index) => (
+      {points.map(([x, y, alpha], index) => (
         <circle
           key={index}
           cx={tenth(x)}
           cy={tenth(y)}
           r={size}
+          fillOpacity={alpha !== undefined && alpha < 1 ? Math.max(0, alpha) : undefined}
           data-pulse={pulse ? "" : undefined}
           style={pulse ? ({ "--pulse-at": `${(index * 137) % 1600}ms` } as React.CSSProperties) : undefined}
         />

@@ -1,0 +1,31 @@
+{
+  "optmem-memory": {
+    "enabled": true,
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "/usr/bin/env python3 ~/.optmem/agy-hook.py session-start",
+        "timeout": 10
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "/usr/bin/env python3 ~/.optmem/agy-hook.py pre-invocation",
+        "timeout": 5
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "run_command|write_file|edit_file|read_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/env python3 ~/.optmem/agy-hook.py pre-tool-use",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

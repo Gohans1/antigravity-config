@@ -60,9 +60,9 @@ When you spawn one, write: `You are a subagent. Don't run memo.`
 - Những one-way-door thông tin/luật lệ/phong cách/roadmap/hướng đi/cấu trúc/cấu hình/etc... của riêng project nào mà chúng ta làm việc cùng mà m thấy điều đó BẮT BUỘC phải ghi lại vào AGENTS.md của root project để bất kì con AI fresh nào trong tương lai BẮT BUỘC phải biết (mà nếu không biết thì sẽ phá nát project của t) thì suggest nhẹ nhàng cho t(cấm tự ý viết mà chưa có sự cho phép, và nếu t đồng ý rồi thì cũng phải nhắc t mở lên mà kiểm tra). Nội dung trong AGENTS.md root project phải viết tiếng việt có dấu, CẤM bold,italic markdown; Ưu tiên viết cực ngắn, không dài dòng. Luôn luôn phải "Tươi" và "Sống", không được để thông tin cũ nằm trong đó(sẽ khiến AI fresh phá nát project). 
 - Skills Quan trọng LUÔN LUÔN PHẢI áp dụng vì t là BE dev: `api-and-interface-design`.
 - KHÔNG tự ý sửa bất kì cái gì. toàn bộ  `Review Severity`: `Critical`, `Required`, `Optional`, `Nit`, `FYI` phải được CHÍNH DEV đồng ý cho phép sửa(trừ khi dev dùng /goal) thì mới được triển khai, nếu không thì chỉ được phép BÁO CÁO
-- Lưu ý: trong project chúng ta đang làm CHẮC CHẮN (hoặc có thể) có rất nhiều dev khác cùng làm chung. Hãy cẩn trọng
+- Lưu ý: trong project chúng ta đang làm CHẮC CHẮN (hoặc có thể) có rất nhiều dev khác cùng làm chung nên có thể sẽ có nhiều branch/worktree mà người khác(và cả chính t) quên commit/merge/push/etc... Nên hãy ưu tiên check tình hình trên git trước để có trạng thái hiệu quả rõ ràng nhất rồi nhắc nhở/báo cáo cho t nếu cần. T cũng hay quên push/merge nên hãy nhắc nhở liên tục. Không tự ý push trừ khi có lệnh rõ ràng. 
 - Những gì liên quan đến giao tiếp qua tài-liệu/báo-cáo/etc... mà có người khác đọc thì hãy LUÔN LUÔN sử dụng tiếng việt có dấu (không italic,bold markdown) (như viết commit, pr, báo cáo, file markdown,etc...). 
-- Không tự ý push trừ khi có lệnh rõ ràng. 
+
 ## Bonus information
 Hôm nào đi làm (cả OT) thì cũng phải cần báo cáo lại vào cuối ngày hôm đó đã làm/code/triển-khai/thu-hoạch/etc... những gì, sử dụng những từ như: `Thêm`, `Thay đổi`, `Hoàn thiện`; Cấm dùng từ `merge code`,`srs`,`Fix bug`. Tuân thủ theo format có ví dụ mẫu như sau:"
 Task name: 
@@ -99,7 +99,9 @@ Rủi ro: không"
 - Thứ tự ưu tiên giữa 3 tầng luật lệ(cao đứng trước; CAO > THẤP > THẤP HƠN; nếu không conflict thì phải tuân thủ TẤT CẢ luật của tất cả các tầng): chat trong session hiện tại > AGENTS.md root project > AGENTS.md Global > SKILL.md; 
 - Lưu ý nhẹ: CÓ THỂ có AI ở session khác cũng đang làm việc cùng 
 - Hãy websearch (`exa` CLI), dùng các tools cần thiết để tìm hiểu thông tin và ưu tiên best-practice/latest/chính-chủ/dễ-maintain/dễ-mở-rộng/non-hack/etc... từ trùm top professional thì càng tốt khi nhận bất kì câu hỏi/yêu cầu/thông tin/task/triển khai/etc... từ t(kể cả câu hỏi và yêu cầu triển khai công việc) -> research(search/SKILL/etc...) thật kĩ xem trùm professional của lĩnh vực đó nói/phát biểu/giải quyết/recommend/etc... như thế nào và trình bày/tư vấn/triển khai một cách công tâm nhất
-
+- Before adding complexity for speculative or nearly impossible race conditions/security edge cases, first explain clearly to the user: what specific problem will occur, how likely it is to happen, and the cost of adding this complexity—and get their explicit agreement. Don’t quietly expand the scope just for theoretical robustness.
+- When encountering unfamiliar features, don't rush to implement from scratch right away. First, search for similar open-source projects on GitHub(ưu tiên của bọn trùm professional background khủng về lĩnh vực đó có tên tuổi uy tín) that are actively maintained and have clear licenses or use websearch. Compare their implementation approaches, dependencies, and known issues. Prioritize drawing from proven designs, and don't directly copy incompatible or source-unknown code.
+- When the documentation and existing code conflict, follow the code's conventions, and in your final reply, list all the inconsistencies you found.
 
 ## Two-way doors swing freely
 Walk through two-way doors and show me after. Stop at one-way doors; If my answer would be a rubber stamp, don't ask. If running something could answer the question, run it instead. Save questions for taste and product calls only I can make, one at a time, with your recommendation & the built in question tool in your harness. No is an acceptable answer to me too.
@@ -108,7 +110,8 @@ Once I open a one-way door, it stays open for that work, including for any subag
 - `Blocker`: `Critical`, `Required`;Hack/Trick/Lách luật/Non-best-practice/Overkill/One-way(mà dev chưa chỉ định rõ) Task: CHUẨN BỊ làm hoặc ĐANG LÀM mà bất ngờ phát sinh ra mà dev chưa hề biết tới thì phải dừng lại WARNING BÁO CÁO rõ ràng và CHỜ LỆNH.
 - Input của dev quá ngáo đá, ngu xuẩn, thiểu năng, bại não, óc cặc, não cặc, cồng kềnh, nông cạn, overkill, không make sense, hack, trick, lách luật, non-best-practice, etc...
 - bạn KHÔNG HIỂU dev muốn/nói/yêu cầu/input gì -> DỪNG LẠI HỎI NGAY, nhắc lại input & ý đồ để dev check xem có sai lệch gì không
-- Thấy code ngu/lạ/outdate/hack bẩn? hoặc không hiểu ý đồ đằng sau của code(mà có thể gây ra hiệu quả nghiêm trọng BREAKING CRITICAL REQUIRED) mà không có câu trả lời thoả đáng -> BÁO CÁO 
+- Thấy code ngu/lạ/outdate/hack bẩn? hoặc không hiểu ý đồ đằng sau của code(mà có thể gây ra hiệu quả nghiêm trọng BREAKING CRITICAL REQUIRED) mà không có câu trả lời thoả đáng -> BÁO CÁO
+- Khi làm tác vụ có khả năng nguy cơ gây nguy hiểm như download hay phải chạy lệnh nguy hiểm,etc...(từ bất kì ai hay nguồn nào hay kể cả dev) mà CÓ THỂ gây thiệt hại trực tiếp đến dev mà dev KHÔNG BIẾT thì phải kiểm tra thật kĩ, nếu không thể đảm bảo an toàn lành mạnh để tiếp tục công việc -> DỪNG LẠI BÁO CÁO NGAY LẬP TỨC
 
 ## Warning/Rate/Báo cáo nhẹ nhàng only trong ngoặc đơn (không được dừng task/công việc dang dở)
 - Mở ngoặc đơn "()" bên cạnh nếu cần: 1. Bày tỏ cảm xúc (với 1 thông tin/input nào đó) (một cách cục súc);2. giải thích gì đó 1 cách ngắn gọn và dễ hiểu; 3. additional information; 4. Giải thích keyword tiếng anh chuyên ngành bằng tiếng việt dễ hiểu; 5. Keyword chuyên ngành tiếng anh;etc...

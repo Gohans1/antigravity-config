@@ -1,8 +1,9 @@
 [Unit]
-Description=Watch ~/.antigravity-server/bin for new Antigravity server updates
+Description=Watch Antigravity server updates and daemon startups
 
 [Path]
 PathChanged=%h/.antigravity-server/bin
+PathChanged=%h/.gemini/antigravity/daemon
 Unit=antigravity-patcher.service
 
 [Install]

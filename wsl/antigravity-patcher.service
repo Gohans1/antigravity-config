@@ -1,5 +1,5 @@
 [Unit]
-Description=Patch Antigravity language_server stdout truncation limit to 128 KiB
+Description=Patch Antigravity language_server limits and Argon Extra/Max thinking levels
 
 [Service]
 Type=oneshot

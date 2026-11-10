@@ -629,8 +629,19 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
             f.write(data)
         st = os.stat(bin_path)
         os.chmod(tmp_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        os.replace(tmp_path, bin_path)
-        print(f"  [saved] Atomically updated {bin_path}")
+        try:
+            os.replace(tmp_path, bin_path)
+            print(f"  [saved] Atomically updated {bin_path}")
+        except PermissionError:
+            if os.name == "nt":
+                print(f"  [locked] {bin_path} is locked by a running process. Terminating language_server.exe to unlock...")
+                subprocess.run(["taskkill", "/F", "/IM", "language_server.exe"], capture_output=True)
+                import time
+                time.sleep(0.5)
+                os.replace(tmp_path, bin_path)
+                print(f"  [saved] Atomically updated {bin_path} after unlock")
+            else:
+                raise
 
     return applied_offsets
 
@@ -758,11 +769,38 @@ def main() -> None:
     import time
 
     cache: dict[str, tuple[int, int, list[tuple[int, bytes, bytes]]]] = {}
-    passes = 6 if "--systemd" in sys.argv else 1
-    for i in range(passes):
-        run_pass(cache)
-        if i + 1 < passes:
-            time.sleep(1.0)
+    if "--watch" in sys.argv:
+        import tempfile
+
+        lock_file = os.path.join(tempfile.gettempdir(), "antigravity_patcher_watch.lock")
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                lock_fd = open(lock_file, "w")
+                msvcrt.locking(lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                lock_fd = open(lock_file, "w")
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except Exception:
+            print("Another patcher instance is already watching. Exiting.")
+            sys.exit(0)
+
+        print("Antigravity watcher started. Monitoring for updates and processes...")
+        while True:
+            try:
+                run_pass(cache)
+            except Exception as e:
+                print(f"Error during patch pass: {e}")
+            time.sleep(3.0)
+    else:
+        passes = 6 if "--systemd" in sys.argv else 1
+        for i in range(passes):
+            run_pass(cache)
+            if i + 1 < passes:
+                time.sleep(1.0)
 
 
 if __name__ == "__main__":

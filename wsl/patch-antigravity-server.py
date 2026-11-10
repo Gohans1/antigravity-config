@@ -204,6 +204,20 @@ def find_all(data: bytes, pat: bytes) -> list[int]:
     return res
 
 def resolve_symbols(data: bytes) -> dict[str, int]:
+    """
+    Dynamically resolves code & runtime type offsets for Gemini 4 Argon Extra/Max injection.
+    Cross-OS note (Linux ELF & Windows PE .exe):
+    - Go 1.17+ uses ABIInternal (rax, rbx, rcx, rdi, rsi, r8..r11) on both Linux and Windows,
+      so all instruction patterns below match byte-for-byte on both OS binaries.
+    - All `lea rel32(%rip)` targets (`maptype_models`, `type_string`, `type_ModelDetails`) are
+      resolved from instructions inside `.text` and re-emitted inside `.text`, so PE section RVA
+      deltas cancel out (`(target_rva - text_delta) - (pc_file + 7) == target_rva - (pc_rva + 7)`).
+    Struct layout reference (see PATCH_MAP.md):
+    - `ModelInfo`: +0x08=Model(int32), +0x38=ModelName.ptr, +0x40=ModelName.len,
+      +0x7c=MinThinkingBudget(int32), +0x80=ThinkingBudget(int32), +0x88=ThinkingLevel(int32).
+    - `ModelDetails` (0x168 bytes, 0x2d qwords): +0x08=DisplayName.ptr, +0x10=DisplayName.len,
+      +0x70=Model(int32), +0xc4=ThinkingLevel(int32).
+    """
     # 1. GetChatMessage slash split check
     p1 = bytes([0x48, 0x8b, 0x11, 0x48, 0x8b, 0x41, 0x08, 0x48, 0x8b, 0x4a, 0x78, 0xff, 0xd1, 0x84, 0xc0, 0x74, 0x6e])
     m1 = find_all(data, p1)
@@ -683,9 +697,17 @@ def is_file_stable(path: str) -> bool:
 def run_pass(
     cache: dict[str, tuple[int, int, list[tuple[int, bytes, bytes]]]],
 ) -> None:
-    server_bins = sorted(
-        glob.glob(os.path.expanduser("~/.antigravity-server/bin/*/language_server"))
-    )
+    cli_bins = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if cli_bins:
+        server_bins = cli_bins
+    elif os.name == "nt":
+        local_app = os.environ.get("LOCALAPPDATA", os.path.expanduser(r"~\AppData\Local"))
+        win_bin = os.path.join(local_app, "Programs", "Antigravity", "resources", "bin", "language_server.exe")
+        server_bins = [win_bin] if os.path.exists(win_bin) else []
+    else:
+        server_bins = sorted(
+            glob.glob(os.path.expanduser("~/.antigravity-server/bin/*/language_server"))
+        )
     if not server_bins:
         print("No language_server binaries found.")
         return

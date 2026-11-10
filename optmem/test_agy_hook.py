@@ -4,6 +4,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -17,10 +18,11 @@ def run_hook(mode, payload, env_extra=None):
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
-        [HOOK, mode],
-        input=json.dumps(payload),
+        [sys.executable, HOOK, mode],
+        input=json.dumps(payload, ensure_ascii=False),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         timeout=5,
     )
@@ -1225,6 +1227,87 @@ class AgyHookTest(unittest.TestCase):
         self.assertEqual(run_hook("session-start", {**base, "isSubagent": True}), {})
         self.assertEqual(run_hook("pre-tool-use", {**base, **memo_call, "isSubagent": True}).get("decision"), "deny")
         self.assertEqual(run_hook("pre-tool-use", {**base, **memo_call, "isSubagent": False}).get("decision"), "allow")
+
+    def test_pre_tool_use_allows_query_urls_when_home_contains_backslash_u_escape(self):
+        win_env = {"HOME": r"C:\Users\ADMIN", "USERPROFILE": r"C:\Users\ADMIN"}
+        payload = {
+            "workspacePaths": [r"c:\Users\ADMIN\Desktop"],
+            "toolCall": {
+                "name": "run_command",
+                "args": {"CommandLine": "exa fetch https://support.google.com/accounts/answer/6317858?hl=en"},
+            },
+        }
+
+        res = run_hook("pre-tool-use", payload, win_env)
+
+        self.assertEqual(res, {"decision": "allow"})
+
+    def test_pre_tool_use_expands_dq_cd_home_when_home_contains_backslash_u_escape(self):
+        win_env = {"HOME": r"C:\Users\ADMIN", "USERPROFILE": r"C:\Users\ADMIN"}
+        ws = [r"c:\Users\ADMIN\projects\slice-player"] if os.name == "nt" else [r"C:\Users\ADMIN/projects/slice-player"]
+        payload = {
+            "workspacePaths": ws,
+            "toolCall": {
+                "name": "run_command",
+                "args": {"CommandLine": 'cd "$HOME/projects/other-repo" && ~/.optmem/memo note "Use Hono RPC"'},
+            },
+        }
+
+        res = run_hook("pre-tool-use", payload, win_env)
+
+        if os.name == "nt":
+            self.assertEqual(
+                res["overwrite"]["CommandLine"],
+                'cd "$HOME/projects/other-repo" && ~/.optmem/memo note "[other-repo] Use Hono RPC"',
+            )
+        else:
+            self.assertEqual(res["decision"], "allow")
+
+    def test_pre_tool_use_decodes_utf8_payload_with_cp1252_unmapped_bytes(self):
+        # 'ờ' encodes in UTF-8 as E1 BB 9D; byte 0x9D fails default Windows cp1252 stdin decoding
+        payload = {
+            "isSubagent": True,
+            "workspacePaths": [r"c:\Users\ADMIN\Desktop"],
+            "toolCall": {
+                "name": "run_command",
+                "args": {"CommandLine": "# ờ\n~/.optmem/memo wake"},
+            },
+        }
+
+        res = run_hook("pre-tool-use", payload)
+
+        self.assertEqual(res["decision"], "deny")
+
+    def test_session_start_wakes_under_current_home_projects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            mem_dir = os.path.join(tmp, "memory")
+            env = {"MEMORY_DIR": mem_dir}
+            subprocess.run(
+                [sys.executable, MEMO, "init"],
+                env={**os.environ, **env},
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [sys.executable, MEMO, "note", "demo-app uses Hono on Bun"],
+                env={**os.environ, **env},
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            ws_dir = os.path.join(os.path.expanduser("~"), "projects", "demo-app")
+            if os.name == "nt" and len(ws_dir) >= 2 and ws_dir[1] == ":":
+                ws_dir = ws_dir[0].lower() + ws_dir[1:]
+
+            res = run_hook("session-start", {"workspacePaths": [ws_dir]}, env)
+
+            self.assertIn("injectSteps", res)
+            msg = res["injectSteps"][0]["systemMessage"]["systemMessage"]
+            self.assertIn("demo-app uses Hono on Bun", msg)
+            self.assertIn("You are awake.", msg)
 
 
 if __name__ == "__main__":

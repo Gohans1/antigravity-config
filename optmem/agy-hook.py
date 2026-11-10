@@ -24,6 +24,10 @@ import subprocess
 import sys
 import unicodedata
 
+for _s in (sys.stdin, sys.stdout, sys.stderr):
+    if hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8")
+
 MEMO = os.path.expanduser("~/.optmem/memo")
 HOME = os.path.normpath(os.path.expanduser("~"))
 PROJECTS_DIR = os.path.join(HOME, "projects")
@@ -144,8 +148,8 @@ def is_subagent(payload):
         return True
     art = payload.get("artifactDirectoryPath") or ""
     transcript = payload.get("transcriptPath") or ""
-    if not art and transcript and "/.system_generated/" in transcript:
-        art = transcript.split("/.system_generated/", 1)[0]
+    if not art and transcript and ("/.system_generated/" in transcript or "\\.system_generated\\" in transcript):
+        art = re.split(r"[/\\]\.system_generated[/\\]", transcript, maxsplit=1)[0]
     if art:
         base_msg_dir = os.path.join(art, ".system_generated", "messages")
         for msg_dir in (base_msg_dir, os.path.join(base_msg_dir, "undelivered")):
@@ -210,22 +214,34 @@ def _fold(text):
 
 
 def _expand_shell_path(raw_path):
-    p = re.sub(r"^\$(?:HOME|\{HOME\})(?=/|$)", HOME, raw_path.strip())
+    p = re.sub(r"^\$(?:HOME|\{HOME\})(?=[/\\]|$)", lambda _: HOME, raw_path.strip())
     return os.path.expanduser(p)
+
+
+def _norm_cmp(path):
+    return os.path.normcase(os.path.normpath(path))
+
+
+def _same_or_under(path, root):
+    np, nr = _norm_cmp(path), _norm_cmp(root)
+    return np == nr or np.startswith(nr + os.sep)
+
+
+_STOP_DIRS = frozenset(_norm_cmp(x) for x in ("/", HOME, PROJECTS_DIR, "/tmp"))
 
 
 def _resolve_git_repo_root(target):
     probe = target
-    while probe and probe not in ("/", HOME, PROJECTS_DIR, "/tmp") and not os.path.isdir(probe):
+    while probe and _norm_cmp(probe) not in _STOP_DIRS and not os.path.isdir(probe):
         parent = os.path.dirname(probe)
         if parent == probe:
             break
         probe = parent
-    if not probe or probe in ("/", HOME, PROJECTS_DIR, "/tmp") or not os.path.isdir(probe):
+    if not probe or _norm_cmp(probe) in _STOP_DIRS or not os.path.isdir(probe):
         return ""
     try:
         real_probe = os.path.realpath(probe)
-        if real_probe in ("/", HOME, PROJECTS_DIR, "/tmp"):
+        if _norm_cmp(real_probe) in _STOP_DIRS:
             return ""
         clean_env = {
             k: v
@@ -237,6 +253,8 @@ def _resolve_git_repo_root(target):
             ["git", "-c", "core.fsmonitor=false", "-C", real_probe, "rev-parse", "--git-common-dir"],
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=2,
             env=clean_env,
         ).strip()
@@ -251,7 +269,7 @@ def _resolve_git_repo_root(target):
         else:
             repo_root = abs_common
         repo_root = os.path.normpath(repo_root)
-        if repo_root in ("/", HOME, PROJECTS_DIR, "/tmp"):
+        if _norm_cmp(repo_root) in _STOP_DIRS:
             return ""
         return repo_root
     except Exception:
@@ -267,29 +285,24 @@ def _resolve_candidate_project(raw_path):
         real_target = os.path.normpath(os.path.realpath(target))
     except Exception:
         return ""
-    if target in ("/", HOME, PROJECTS_DIR, "/tmp") or real_target in ("/", HOME, PROJECTS_DIR, "/tmp"):
+    if _norm_cmp(target) in _STOP_DIRS or _norm_cmp(real_target) in _STOP_DIRS:
         return ""
     for excluded in (os.path.join(HOME, ".gemini"), os.path.join(HOME, ".optmem")):
         real_exc = os.path.normpath(os.path.realpath(excluded))
-        if (
-            target == excluded
-            or target.startswith(excluded + os.sep)
-            or real_target == real_exc
-            or real_target.startswith(real_exc + os.sep)
-        ):
+        if _same_or_under(target, excluded) or _same_or_under(real_target, real_exc):
             return ""
 
     # 1. Git repository, worktree, or submodule: resolve main superproject via --git-common-dir
     git_root = _resolve_git_repo_root(target)
     if git_root:
-        base = os.path.basename(git_root.rstrip("/"))
+        base = os.path.basename(git_root.rstrip("/\\"))
         if base.endswith(".git") and len(base) > 4:
             base = base[:-4]
         if base not in IGNORED_BASENAMES and SAFE_PROJECT_RE.match(base):
             return base
 
     # 2. Under ~/projects/<project-name>(/...): always take the top-level project folder
-    if target.startswith(PROJECTS_DIR + os.sep):
+    if _same_or_under(target, PROJECTS_DIR):
         rel = os.path.relpath(target, PROJECTS_DIR)
         first_part = rel.split(os.sep)[0]
         if (
@@ -640,7 +653,7 @@ def _shell_state_at(cmd, limit, base_dir, in_heredoc=False, prev_dir=None, chang
                         if is_sq_cd:
                             expanded = raw_cd
                         elif is_dq_cd:
-                            expanded = re.sub(r"^\$(?:HOME|\{HOME\})(?=/|$)", HOME, raw_cd)
+                            expanded = re.sub(r"^\$(?:HOME|\{HOME\})(?=/|$)", lambda _: HOME, raw_cd)
                         else:
                             expanded = _expand_shell_path(raw_cd)
                         new_dir = (
@@ -705,9 +718,11 @@ def _unescaped_utf8_len(text, kind):
 def run_memo(args, timeout=5):
     try:
         proc = subprocess.run(
-            [MEMO] + list(args),
+            [sys.executable, MEMO] + list(args),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
         out = (proc.stdout or "") + (proc.stderr or "")
@@ -860,7 +875,7 @@ def _payload_cwd_touches_optmem(payload):
         try:
             expanded = os.path.realpath(os.path.abspath(_expand_shell_path(str(c))))
             for root in (optmem_root, mem_root):
-                if expanded == root or expanded.startswith(root + os.sep):
+                if _same_or_under(expanded, root):
                     return True
         except Exception:
             continue
@@ -947,8 +962,8 @@ def handle_pre_tool_use(payload):
                 real_p = os.path.realpath(os.path.abspath(_expand_shell_path(str(raw_p))))
                 mem_root = os.path.realpath(memory_dir())
                 optmem_root = os.path.realpath(os.path.expanduser("~/.optmem"))
-                in_mem = real_p == mem_root or real_p.startswith(mem_root + os.sep)
-                in_optmem = real_p == optmem_root or real_p.startswith(optmem_root + os.sep)
+                in_mem = _same_or_under(real_p, mem_root)
+                in_optmem = _same_or_under(real_p, optmem_root)
                 if tool_name in ("write_file", "edit_file") and (in_mem or ( in_optmem and is_subagent(payload))):
                     return {
                         "decision": "deny",

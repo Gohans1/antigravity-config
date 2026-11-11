@@ -6,25 +6,33 @@ Idempotent binary + live-memory patcher for Antigravity language_server.
 - Raises global rules / skills file & token limits (24 KB / 20k tokens) to 128 KiB / 128k tokens.
 - Raises view_file limits (MaxLinesPerView 800 -> 2,000 lines, MaxBytesPerView 45 KiB -> 68 KiB)
   and DefaultSerializer.stepToMessage maxStepTokens (16,384 -> 44,544 tokens / 129 KiB).
-- Unlocks Gemini 4 Argon Extra (Xhigh, ThinkingLevel=5, MODEL_PLACEHOLDER_M416) and
-  Max (ThinkingLevel=6, MODEL_PLACEHOLDER_M415) in UI selector and CCPA requests.
+
+Limit-only by design. The old Gemini 4 Argon Extra/Max unlock was removed: 2.31.0 turned
+staticCatalog.GetModelInfoFromKey into a map[int32] lookup, so the string slash-truncation
+patch read [rbx+0x38] as a pointer and killed the language server with 0xC0000005.
+Do not re-add it without re-deriving the whole chain. See PATCH_MAP.md.
 """
 import glob
 import os
 import re
 import shutil
 import stat
-import struct
 import subprocess
 import sys
 
 # Exact byte patches: (name, original_bytes, patched_bytes, required)
 EXACT_PATCHES = [
     (
-        "command.TruncateOutput (8 KiB -> 42 KiB unconditional)",
+        "command.TruncateOutput (8 KiB -> 42 KiB default limit)",
+        bytes.fromhex("be00200000480f45f24889d84889f331c9e8"),
+        bytes.fromhex("be00a80000480f45f24889d84889f331c9e8"),
+        True,
+    ),
+    (
+        "command.TruncateOutput (8 KiB -> 42 KiB unconditional, <= 2.30)",
         bytes.fromhex("488b4308488b5b104885c9ba00200000480f44ca"),
         bytes.fromhex("488b4308488b5b1031c990ba00a80000480f44ca"),
-        True,
+        False,
     ),
     (
         "ideCommand.execute (8 KiB -> 42 KiB raw debug buffer)",
@@ -80,6 +88,12 @@ EXACT_PATCHES = [
     ),
     (
         "customizations.computeTruncatedCustomizations (20k -> 128k skills/workflows token budget)",
+        bytes.fromhex("8b12eb0931d2eb05ba204e000044894c244c"),
+        bytes.fromhex("8b12eb0931d2eb05ba0000020044894c244c"),
+        False,
+    ),
+    (
+        "customizations.computeTruncatedCustomizations (20k -> 128k skills/workflows token budget, <= 2.30)",
         bytes.fromhex("8b12eb0931d2eb05ba204e000044898c24"),
         bytes.fromhex("8b12eb0931d2eb05ba0000020044898c24"),
         False,
@@ -187,388 +201,6 @@ TRUNCATE_OUTPUT_PATCHED_RE = re.compile(
     + b"(....)",
     re.DOTALL,
 )
-
-
-import struct
-import re
-
-def find_all(data: bytes, pat: bytes) -> list[int]:
-    res = []
-    start = 0
-    while True:
-        idx = data.find(pat, start)
-        if idx == -1:
-            break
-        res.append(idx)
-        start = idx + 1
-    return res
-
-def resolve_symbols(data: bytes) -> dict[str, int]:
-    """
-    Dynamically resolves code & runtime type offsets for Gemini 4 Argon Extra/Max injection.
-    Cross-OS note (Linux ELF & Windows PE .exe):
-    - Go 1.17+ uses ABIInternal (rax, rbx, rcx, rdi, rsi, r8..r11) on both Linux and Windows,
-      so all instruction patterns below match byte-for-byte on both OS binaries.
-    - All `lea rel32(%rip)` targets (`maptype_models`, `type_string`, `type_ModelDetails`) are
-      resolved from instructions inside `.text` and re-emitted inside `.text`, so PE section RVA
-      deltas cancel out (`(target_rva - text_delta) - (pc_file + 7) == target_rva - (pc_rva + 7)`).
-    Struct layout reference (see PATCH_MAP.md):
-    - `ModelInfo`: +0x08=Model(int32), +0x38=ModelName.ptr, +0x40=ModelName.len,
-      +0x7c=MinThinkingBudget(int32), +0x80=ThinkingBudget(int32), +0x88=ThinkingLevel(int32).
-    - `ModelDetails` (0x168 bytes, 0x2d qwords): +0x08=DisplayName.ptr, +0x10=DisplayName.len,
-      +0x70=Model(int32), +0xc4=ThinkingLevel(int32).
-    """
-    # 1. GetChatMessage slash split check
-    p1 = bytes([0x48, 0x8b, 0x11, 0x48, 0x8b, 0x41, 0x08, 0x48, 0x8b, 0x4a, 0x78, 0xff, 0xd1, 0x84, 0xc0, 0x74, 0x6e])
-    m1 = find_all(data, p1)
-    assert len(m1) == 1, f"m1={len(m1)}"
-    chat_je_idx = m1[0] + 15
-
-    # 2. fetchAvailableModels filter call
-    p2 = bytes([0x48, 0x83, 0xfa, 0x1d, 0x74, 0x04, 0x31, 0xc9, 0xeb, 0x25])
-    m2 = find_all(data, p2)
-    assert len(m2) == 1, f"m2={len(m2)}"
-    jmp_from = m2[0]
-    p2_to = bytes([0x48, 0x8b, 0x9c, 0x24, 0xc8, 0x00, 0x00, 0x00, 0x48, 0x8b, 0x8c, 0x24, 0xd0, 0x00, 0x00, 0x00])
-    jmp_to = data.find(p2_to, jmp_from, jmp_from + 0x100)
-    assert jmp_to != -1
-    call_pos = data.find(bytes([0x66, 0x90, 0xe8]), jmp_to, jmp_to + 0x40)
-    assert call_pos != -1
-    call_ins = call_pos + 2
-    rel = struct.unpack("<i", data[call_ins + 1 : call_ins + 5])[0]
-    filter_fn = call_ins + 5 + rel
-
-    # 3. Inside filter_fn, extract runtime helpers
-    fn_bytes = data[filter_fn : filter_fn + 0x850]
-    lea_pos = filter_fn + 0xec
-    assert data[lea_pos : lea_pos + 3] == bytes([0x48, 0x8d, 0x05])
-    maptype_models = lea_pos + 7 + struct.unpack("<i", data[lea_pos + 3 : lea_pos + 7])[0]
-
-    m_map = re.search(re.escape(bytes([0x90, 0xe8])) + b"(....)" + re.escape(bytes([0x84, 0xdb, 0x0f, 0x85])), fn_bytes, re.DOTALL)
-    assert m_map is not None
-    call_map_pos = filter_fn + m_map.start() + 1
-    mapaccess2_faststr = call_map_pos + 5 + struct.unpack("<i", m_map.group(1))[0]
-
-    m_asgn = re.search(re.escape(bytes([0x48, 0x8b, 0x4c, 0x24, 0x70, 0x48, 0x8b, 0x7c, 0x24, 0x38, 0xe8])) + b"(....)", fn_bytes, re.DOTALL)
-    assert m_asgn is not None
-    call_asgn_pos = filter_fn + m_asgn.start() + 10
-    mapassign_faststr = call_asgn_pos + 5 + struct.unpack("<i", m_asgn.group(1))[0]
-
-    m_new = re.search(re.escape(bytes([0x0f, 0x1f, 0x00, 0xe8])) + b"(....)" + re.escape(bytes([0x48, 0x89, 0x84, 0x24, 0x68, 0x02, 0x00, 0x00])), fn_bytes, re.DOTALL)
-    assert m_new is not None
-    call_new_pos = filter_fn + m_new.start() + 3
-    newobject = call_new_pos + 5 + struct.unpack("<i", m_new.group(1))[0]
-
-    m_grow = re.search(re.escape(bytes([0x4c, 0x89, 0xcb, 0x48, 0x89, 0xd1, 0xbf, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8d, 0x35])) + b"(....)" + re.escape(bytes([0xe8])) + b"(....)", data[jmp_from : jmp_from + 0x2000], re.DOTALL)
-    assert m_grow is not None
-    lea_str_pos = jmp_from + m_grow.start() + 11
-    type_string = lea_str_pos + 7 + struct.unpack("<i", m_grow.group(1))[0]
-    call_grow_pos = lea_str_pos + 7
-    growslice = call_grow_pos + 5 + struct.unpack("<i", m_grow.group(2))[0]
-
-    # 4. type_ModelDetails
-    m_md = re.search(
-        re.escape(bytes([0x48, 0x8d, 0x05]))
-        + b"(....)"
-        + re.escape(bytes([0xe8]))
-        + b"(....)"
-        + re.escape(bytes([0xc7, 0x40, 0x70, 0x46, 0x01, 0x00, 0x00])),
-        data,
-        re.DOTALL,
-    )
-    assert m_md is not None
-    lea_md_pos = m_md.start()
-    type_ModelDetails = lea_md_pos + 7 + struct.unpack("<i", m_md.group(1))[0]
-
-    # 5. staticCatalog.GetModelInfoFromKey
-    pat_gmi = (
-        re.escape(bytes([0x84, 0xdb, 0x74, 0x2c, 0x48, 0x8b, 0x18, 0x48, 0x8d, 0x05]))
-        + b".{29}"
-        + re.escape(bytes([0x48, 0x89, 0xd8, 0x31, 0xdb, 0x31, 0xc9, 0xc9, 0xc3]))
-    )
-    m_gmi = list(re.finditer(pat_gmi, data, re.DOTALL))
-    assert len(m_gmi) == 1
-    get_model_info_idx = m_gmi[0].start() + 7
-
-    return {
-        "chat_je_idx": chat_je_idx,
-        "jmp_from": jmp_from,
-        "jmp_to": jmp_to,
-        "filter_fn": filter_fn,
-        "maptype_models": maptype_models,
-        "mapaccess2_faststr": mapaccess2_faststr,
-        "mapassign_faststr": mapassign_faststr,
-        "newobject": newobject,
-        "type_string": type_string,
-        "growslice": growslice,
-        "type_ModelDetails": type_ModelDetails,
-        "get_model_info_idx": get_model_info_idx,
-    }
-
-
-def build_filter_patch(syms: dict[str, int]) -> tuple[int, bytes]:
-    body_start = syms["filter_fn"] + 0xec
-    buf = bytearray()
-    fixups: list[tuple[int, str, str]] = []
-    labels: dict[str, int] = {}
-
-    def pc() -> int:
-        return body_start + len(buf)
-
-    def emit(b: list[int] | bytes) -> None:
-        buf.extend(b)
-
-    def emit_lea_abs(prefix: list[int], target: int) -> None:
-        rel = target - (pc() + len(prefix) + 4)
-        emit(prefix)
-        emit(struct.pack("<i", rel))
-
-    def emit_lea_lbl(prefix: list[int], lbl: str) -> None:
-        emit(prefix)
-        fixups.append((len(buf), "rel32", lbl))
-        emit(b"\x00\x00\x00\x00")
-
-    def emit_call(target: int) -> None:
-        rel = target - (pc() + 5)
-        emit([0xe8])
-        emit(struct.pack("<i", rel))
-
-    def emit_jcc(opcode: list[int], lbl: str) -> None:
-        emit(opcode)
-        fixups.append((len(buf), "rel32", lbl))
-        emit(b"\x00\x00\x00\x00")
-
-    models = [
-        (
-            "argon",
-            b"gemini-4-argon-high",
-            [
-                ("argon_id_xhigh", b"gemini-4-argon-high/xhigh", "argon_disp_xhigh", b"Gemini 4 Argon (Xhigh)", -1, 5),
-                ("argon_id_max", b"gemini-4-argon-high/max", "argon_disp_max", b"Gemini 4 Argon (Max)", -2, 6),
-            ],
-        ),
-        (
-            "flash",
-            b"gemini-3.8-flash-high",
-            [
-                ("flash_id_xhigh", b"gemini-3.8-flash-high/xhigh", "flash_disp_xhigh", b"Gemini 3.8 Flash (Xhigh)", -1, 5),
-                ("flash_id_max", b"gemini-3.8-flash-high/max", "flash_disp_max", b"Gemini 3.8 Flash (Max)", -2, 6),
-            ],
-        ),
-    ]
-
-    for tag, base_id, variants in models:
-        next_lbl = f"next_{tag}"
-        # 1. Lookup base_id in 0x80(%rsp)
-        emit_lea_abs([0x48, 0x8d, 0x05], syms["maptype_models"])
-        emit([0x48, 0x8b, 0x9c, 0x24, 0x80, 0x00, 0x00, 0x00])
-        emit_lea_lbl([0x48, 0x8d, 0x0d], f"base_{tag}")
-        emit([0xbf] + list(struct.pack("<I", len(base_id))))
-        emit_call(syms["mapaccess2_faststr"])
-        emit([0x84, 0xdb])
-        emit_jcc([0x0f, 0x84], next_lbl)
-        emit([0x48, 0x8b, 0x00, 0x48, 0x85, 0xc0])
-        emit_jcc([0x0f, 0x84], next_lbl)
-        emit([0x48, 0x89, 0x84, 0x24, 0xf0, 0x00, 0x00, 0x00])
-
-        # 2. Check if xhigh is already in 0x80(%rsp)
-        emit_lea_abs([0x48, 0x8d, 0x05], syms["maptype_models"])
-        emit([0x48, 0x8b, 0x9c, 0x24, 0x80, 0x00, 0x00, 0x00])
-        emit_lea_lbl([0x48, 0x8d, 0x0d], variants[0][0])
-        emit([0xbf] + list(struct.pack("<I", len(variants[0][1]))))
-        emit_call(syms["mapaccess2_faststr"])
-        emit([0x84, 0xdb])
-        emit_jcc([0x0f, 0x85], next_lbl)
-
-        # 3. Create & insert variants
-        for id_lbl, id_bytes, disp_lbl, disp_bytes, m_delta, t_lvl in variants:
-            emit_lea_abs([0x48, 0x8d, 0x05], syms["type_ModelDetails"])
-            emit_call(syms["newobject"])
-            emit([0x48, 0x89, 0x44, 0x24, 0x78])
-            emit([0x48, 0x89, 0xc7])
-            emit([0x48, 0x8b, 0xb4, 0x24, 0xf0, 0x00, 0x00, 0x00])
-            emit([0xb9, 0x2d, 0x00, 0x00, 0x00, 0xf3, 0x48, 0xa5])
-            emit_lea_lbl([0x48, 0x8d, 0x0d], disp_lbl)
-            emit([0x48, 0x89, 0x48, 0x08])
-            emit([0x48, 0xc7, 0x40, 0x10] + list(struct.pack("<I", len(disp_bytes))))
-            emit([0x83, 0x40, 0x70, m_delta & 0xff])
-            emit([0xc7, 0x80, 0xc4, 0x00, 0x00, 0x00] + list(struct.pack("<I", t_lvl)))
-            emit_lea_abs([0x48, 0x8d, 0x05], syms["maptype_models"])
-            emit([0x48, 0x8b, 0x9c, 0x24, 0x80, 0x00, 0x00, 0x00])
-            emit_lea_lbl([0x48, 0x8d, 0x0d], id_lbl)
-            emit([0xbf] + list(struct.pack("<I", len(id_bytes))))
-            emit_call(syms["mapassign_faststr"])
-            emit([0x48, 0x8b, 0x4c, 0x24, 0x78, 0x48, 0x89, 0x08])
-
-        # 4. Append to AgentModelSorts[0].Groups[0].ModelIds
-        emit([0x48, 0x8b, 0x84, 0x24, 0x98, 0x02, 0x00, 0x00])
-        emit([0x48, 0x83, 0x78, 0x28, 0x00])
-        emit_jcc([0x0f, 0x8e], next_lbl)
-        emit([0x48, 0x8b, 0x40, 0x20, 0x48, 0x8b, 0x00, 0x48, 0x85, 0xc0])
-        emit_jcc([0x0f, 0x84], next_lbl)
-        emit([0x48, 0x83, 0x78, 0x20, 0x00])
-        emit_jcc([0x0f, 0x8e], next_lbl)
-        emit([0x48, 0x8b, 0x40, 0x18, 0x48, 0x8b, 0x00, 0x48, 0x85, 0xc0])
-        emit_jcc([0x0f, 0x84], next_lbl)
-        emit([0x48, 0x89, 0x84, 0x24, 0xf0, 0x00, 0x00, 0x00])
-        emit([0x48, 0x8b, 0x48, 0x20, 0x48, 0x89, 0x4c, 0x24, 0x50])
-        emit([0x48, 0x8b, 0x50, 0x28, 0x48, 0x8b, 0x40, 0x18])
-        emit([0x48, 0x8d, 0x59, 0x02, 0x48, 0x89, 0xd1, 0xbf, 0x02, 0x00, 0x00, 0x00])
-        emit_lea_abs([0x48, 0x8d, 0x35], syms["type_string"])
-        emit_call(syms["growslice"])
-        emit([0x48, 0x8b, 0x54, 0x24, 0x50, 0x48, 0xc1, 0xe2, 0x04, 0x48, 0x8d, 0x3c, 0x10])
-        emit_lea_lbl([0x48, 0x8d, 0x35], variants[0][0])
-        emit([0x48, 0x89, 0x37, 0x48, 0xc7, 0x47, 0x08] + list(struct.pack("<I", len(variants[0][1]))))
-        emit_lea_lbl([0x48, 0x8d, 0x35], variants[1][0])
-        emit([0x48, 0x89, 0x77, 0x10, 0x48, 0xc7, 0x47, 0x18] + list(struct.pack("<I", len(variants[1][1]))))
-        emit([0x48, 0x8b, 0xb4, 0x24, 0xf0, 0x00, 0x00, 0x00])
-        emit([0x48, 0x89, 0x46, 0x18, 0x48, 0x89, 0x5e, 0x20, 0x48, 0x89, 0x4e, 0x28])
-
-        labels[next_lbl] = len(buf)
-
-    labels["done"] = len(buf)
-    emit([0xc9, 0xc3])
-
-    # String constants
-    for tag, base_id, variants in models:
-        labels[f"base_{tag}"] = len(buf)
-        emit(base_id)
-        for id_lbl, id_bytes, disp_lbl, disp_bytes, _, _ in variants:
-            labels[id_lbl] = len(buf)
-            emit(id_bytes)
-            labels[disp_lbl] = len(buf)
-            emit(disp_bytes)
-
-    for pos, kind, lbl in fixups:
-        target_off = labels[lbl]
-        rel = target_off - (pos + 4)
-        buf[pos : pos + 4] = struct.pack("<i", rel)
-
-    return body_start, bytes(buf)
-
-
-
-def apply_argon_thinking_patches(
-    data: bytearray,
-    current_data: bytearray,
-    applied_offsets: list[tuple[int, bytes, bytes]],
-) -> bool:
-    try:
-        syms = resolve_symbols(data)
-    except Exception as e:
-        print(f"  [WARN] Thinking models symbol resolution skipped: {e}")
-        return False
-
-    modified = False
-    body_start, filter_code = build_filter_patch(syms)
-    jmp_from = syms["jmp_from"]
-    jmp_to = syms["jmp_to"]
-    rel8 = jmp_to - (jmp_from + 2)
-    assert 0 < rel8 < 0x80
-
-    gmi_idx = syms["get_model_info_idx"]
-    # Generic slash truncation: scans ModelName bytes for '/' and sets len to index of '/'
-    slash_trunc_patch = bytes.fromhex("488b7b38488b4b4031c0803c072f740748ffc04839c872f1eb04488943409090")
-    assert len(slash_trunc_patch) == 32
-
-    patches = [
-        (
-            "staticCatalog.GetModelInfoFromKey (generic slash truncation for ThinkingLevel>=5)",
-            gmi_idx,
-            bytes(data[gmi_idx : gmi_idx + 32]),
-            slash_trunc_patch,
-        ),
-        (
-            "CodeAssistClient.GetChatMessage (strip /xhigh and /max modelId suffix)",
-            syms["chat_je_idx"],
-            bytes([0x74, 0x6e]),
-            bytes([0x90, 0x90]),
-        ),
-        (
-            "CodeAssistClient.fetchAvailableModels (always invoke model injector)",
-            jmp_from,
-            bytes(data[jmp_from : jmp_from + 10]),
-            bytes([0xeb, rel8] + [0x90] * 8),
-        ),
-        (
-            "CodeAssistClient.filterUnavailableVertex3PModels (inject Argon & Flash Extra=5 & Max=6)",
-            body_start,
-            bytes(data[body_start : body_start + len(filter_code)]),
-            filter_code,
-        ),
-    ]
-
-    for name, idx, orig, patched in patches:
-        assert len(orig) == len(patched)
-        data[idx : idx + len(patched)] = patched
-        applied_offsets.append((idx, orig, patched))
-        if current_data[idx : idx + len(patched)] == patched:
-            print(f"  [already-patched] {name} @ 0x{idx:x}")
-        else:
-            modified = True
-            print(f"  [patched] {name} @ 0x{idx:x}")
-
-    return modified
-
-
-def refresh_live_models(pid: int) -> None:
-    try:
-        import ssl
-        import urllib.request
-
-        cmd = (
-            open(f"/proc/{pid}/cmdline", "rb")
-            .read()
-            .decode("utf-8", "ignore")
-            .split("\x00")
-        )
-        if "--csrf_token" not in cmd:
-            return
-        csrf = cmd[cmd.index("--csrf_token") + 1]
-        ss = subprocess.check_output(["ss", "-tlnp"], text=True)
-        ports = [
-            int(m.group(1))
-            for m in re.finditer(rf"127\.0\.0\.1:(\d+)\s+.*pid={pid},", ss)
-        ]
-        ctx = ssl._create_unverified_context()
-        for port in ports:
-            for scheme in ("https", "http"):
-                try:
-                    url = f"{scheme}://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetAvailableModels"
-                    hdrs = {
-                        "Content-Type": "application/json",
-                        "x-codeium-csrf-token": csrf,
-                    }
-                    c = ctx if scheme == "https" else None
-                    cached = urllib.request.urlopen(
-                        urllib.request.Request(url, data=b"{}", headers=hdrs, method="POST"),
-                        context=c,
-                        timeout=4,
-                    ).read()
-                    if b"gemini-4-argon-high/xhigh" in cached:
-                        return
-                    body = urllib.request.urlopen(
-                        urllib.request.Request(url, data=b'{"forceRefresh":true}', headers=hdrs, method="POST"),
-                        context=c,
-                        timeout=8,
-                    ).read()
-                    if b"gemini-4-argon-high/xhigh" in body:
-                        url2 = f"{scheme}://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetCascadeModelConfigData"
-                        urllib.request.urlopen(
-                            urllib.request.Request(url2, data=b"{}", headers=hdrs, method="POST"),
-                            context=c,
-                            timeout=8,
-                        ).read()
-                        print(
-                            f"  [live-models-refreshed] PID {pid} ({scheme}://127.0.0.1:{port}) -> Argon Extra & Max active"
-                        )
-                        return
-                except Exception:
-                    continue
-    except Exception:
-        pass
-
-
 def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
     orig_backup = bin_path + ".orig"
     with open(bin_path, "rb") as f:
@@ -637,10 +269,6 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
             f"  [WARN] Required signature '{td_name}' orig={len(m_orig)} patched={len(m_patched)} in {bin_path}",
             file=sys.stderr,
         )
-
-    # Layer 3: Gemini 4 Argon Extra (Xhigh, ThinkingLevel=5) & Max (ThinkingLevel=6)
-    if apply_argon_thinking_patches(data, current_data, applied_offsets):
-        modified = True
 
     if modified:
         if not os.path.exists(orig_backup):
@@ -713,7 +341,6 @@ def live_patch_pid(pid: int, offsets: list[tuple[int, bytes, bytes]]) -> None:
         )
     except subprocess.CalledProcessError:
         subprocess.run(["sudo", "-n", sys.executable, "-c", helper], check=True)
-    refresh_live_models(pid)
 
 
 def is_file_stable(path: str) -> bool:

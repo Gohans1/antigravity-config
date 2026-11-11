@@ -213,6 +213,7 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
         data = bytearray(current_data)
 
     applied_offsets: list[tuple[int, bytes, bytes]] = []
+    missing_required: list[str] = []
     modified = False
 
     for name, orig, patched, required in EXACT_PATCHES:
@@ -236,6 +237,7 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
                 modified = True
                 print(f"  [patched] {name} @ 0x{idx:x}")
         elif required:
+            missing_required.append(name)
             print(
                 f"  [WARN] Required signature '{name}' count={c_orig} in {bin_path}",
                 file=sys.stderr,
@@ -265,10 +267,19 @@ def patch_binary_file(bin_path: str) -> list[tuple[int, bytes, bytes]]:
             modified = True
             print(f"  [patched] {td_name} @ 0x{idx:x}")
     else:
+        missing_required.append(td_name)
         print(
             f"  [WARN] Required signature '{td_name}' orig={len(m_orig)} patched={len(m_patched)} in {bin_path}",
             file=sys.stderr,
         )
+
+    if missing_required:
+        print(
+            f"  [ABORT] {bin_path} left untouched, required anchors not found: "
+            f"{', '.join(missing_required)}. Re-derive them for this version.",
+            file=sys.stderr,
+        )
+        return []
 
     if modified:
         if not os.path.exists(orig_backup):
